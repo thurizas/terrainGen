@@ -709,11 +709,9 @@ void terrainGen::onSimCenters()
 
 void terrainGen::onSimPlates()
 {
-  //onSimPlatesImpl();             // call onSimPlatesImpl() to assign first hexagon
-
   m_timer = new  QTimer(this);
   connect(m_timer, &QTimer::timeout, this, &terrainGen::onSimPlatesImpl);
-  m_timer->start(1500);
+  m_timer->start(150);
 }
 
 void terrainGen::onSimPlatesImpl()
@@ -790,10 +788,54 @@ void terrainGen::onSimPlatesImpl()
 
 }
 
-
+/**************************************************************************************************
+ * Function: 
+ *
+ * Abstract:  tectonic plates velocity is between 1 to 10 cm a year, most are in the range of 2 to
+ *            5 cm a year.  assume a normally distributed velociy with \mu = 4.5, and \sigma = 2.0
+ *
+ * Input   :
+ *
+ * Returns :
+ *
+ * Written : () 
+ *************************************************************************************************/
 void terrainGen::onSimMotion() 
-{ 
-  qDebug() << "in onSimMotion"; 
+{
+  std::normal_distribution<double_t>  norDist(4.5, 2.0);
+  std::uniform_real_distribution<double_t> dirDist(0.0, 360.0);
+  // TODO : all plates have been drawn -- generate border and store as a path in the plate structure
+  // 
+  // m_plates is an array of platesT structures
+  // TODO : generate motion vector and draw on display, motion vector oragin is plate center
+  for (uint32_t ndx = 0; ndx < m_cntPlates; ndx++)
+  {
+    CLogger::getInstance()->outMsg(cmdLine, CLogger::level::INFO, "generating motion vector for plate %d", ndx);
+
+    double_t plateSpeed = norDist(*m_gen);
+    if (plateSpeed < 0) plateSpeed = 2.0;
+    double_t plateDir = dirDist(*m_gen);
+    CLogger::getInstance()->outMsg(cmdLine, CLogger::level::INFO, "      speed %.4f", plateSpeed);
+    CLogger::getInstance()->outMsg(cmdLine, CLogger::level::INFO, "      direction %.4f", plateDir);
+
+    // TODO : draw vector
+    double_t OrigX = m_plates[ndx].center_x;
+    double_t OrigY = m_plates[ndx].center_y;
+    double_t DestX = OrigX + 10*plateSpeed * cos(plateDir * (pi / 180));
+    double_t DestY = OrigY + 10*plateSpeed * sin(plateDir * (pi / 180));
+
+    QGraphicsLineItem* line = new QGraphicsLineItem(OrigX, OrigY, DestX, DestY);
+    line->setPen(QPen(Qt::black));
+    m_pScene->addItem(line);
+
+    double_t HeadX = DestX + 4 * cos(45 * pi / 180);
+    double_t HeadY = DestY + 4 * cos(45 * pi / 180);
+    QGraphicsLineItem* head = new QGraphicsLineItem(DestX, DestY, HeadX, HeadY);
+    head->setPen(QPen(Qt::black));
+    m_pScene->addItem(head);
+    CLogger::getInstance()->outMsg(cmdLine, CLogger::level::INFO, "       orig: (%.4f,%.4f) dest:(%.4f,%.4f)", OrigX, OrigY, DestX, DestY);
+    
+  }
 
   m_pSimMotion->setEnabled(false);
   m_pSimTimeDelta->setEnabled(true);
