@@ -103,6 +103,7 @@
   <ItemGroup>
     <ClCompile Include="console.cpp" />
     <ClCompile Include="evDist.cpp" />
+    <ClCompile Include="graphicsLayer.cpp" />
     <ClCompile Include="hexagon.cpp" />
     <ClCompile Include="imageProps.cpp" />
     <ClCompile Include="logger.cpp" />
@@ -121,6 +122,7 @@
     <ClInclude Include="console.h" />
     <ClInclude Include="constants.h" />
     <ClInclude Include="evDist.h" />
+    <ClInclude Include="graphicsLayer.h" />
     <ClInclude Include="gridcell.h" />
     <ClInclude Include="hexagon.h" />
     <ClInclude Include="logger.h" />

@@ -15,10 +15,16 @@ static const uint32_t mbarHeight = 21;
 
 static const uint8_t nbrHarmonics = 3;
 
-static const uint8_t bFilled = 0x01;     //b0000 0001
-static const uint8_t bColor = 0x02;      //b0000 0010
-static const uint8_t bDispCenter = 0x04; //b0000 0100
-static const uint8_t bDispIndex = 0x08;  //b0000 1000
+static const uint8_t bHollow = 0x01;     //b0000 0001
+static const uint8_t bFilled = 0x02;     //b0000 0010
+static const uint8_t bColor = 0x04;      //b0000 0100
+static const uint8_t bDispCenter = 0x08; //b0000 1000
+static const uint8_t bDispIndex = 0x10;  //b0001 0000
+
+static const uint8_t mapLayers = 6;
+
+static char* layerName[mapLayers] = {(char*)"grid        ", (char*)"plates      ", (char*)"rivers/lakes", (char*)"coasts      ", (char*)"map border  ",
+                                     (char*)"labels      "};
 
 
 
@@ -32,9 +38,9 @@ static const double cos60 = 0.5000000000000000000000000000000;      // cos30 = 1
 
 struct imageProps
 {
-	uint64_t       imageWidth;
-	uint64_t       imageHeight;
-	uint64_t       hexagonSize;
+	double_t       imageWidth;
+	double_t       imageHeight;
+	double_t       hexagonSize;
 	uint8_t        hexagonOrient;
 	uint8_t        hexagonProps;
 	uint32_t       cntPlates;

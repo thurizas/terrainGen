@@ -32,7 +32,7 @@ imagePropDlg::imagePropDlg(struct imageProps*  pip, bool doSave, QWidget* p, Qt:
      if ((pip->hexagonProps & bDispCenter) == bDispCenter) m_cbxCenter->setChecked(true);
      if ((pip->hexagonProps & bDispIndex) == bDispIndex) m_cbxIndex->setChecked(true);
 
-     if (pip->hexagonOrient == CHexagon::VERTICAL)
+     if (pip->hexagonOrient == hexagon::orien::VERTICAL)
      {
        m_vertical->setChecked(true);
      }
@@ -370,9 +370,9 @@ void imagePropDlg::setupUI(bool doSave)
 uint8_t imagePropDlg::orientation()
 {
     if (m_vertical->isChecked())
-        return CHexagon::VERTICAL;
+        return hexagon::orien::VERTICAL;
     else
-        return CHexagon::HORIZONTAL;
+        return hexagon::orien::HORIZONTAL;
 }
 
 
@@ -416,7 +416,7 @@ void imagePropDlg::saveValues()
     m_pImageProps->imageWidth = m_edtWidth->text().toInt();
     m_pImageProps->imageHeight = m_edtHeight->text().toInt();
     m_pImageProps->hexagonSize = m_edtHexagonSize->text().toInt();
-    m_pImageProps->hexagonOrient = (m_vertical->isChecked() ? CHexagon::VERTICAL : CHexagon::HORIZONTAL);
+    m_pImageProps->hexagonOrient = (m_vertical->isChecked() ? hexagon::orien::VERTICAL : hexagon::orien::HORIZONTAL);
     int cnt = m_spnPlates->value();
     m_pImageProps->cntPlates = m_spnPlates->value();
 

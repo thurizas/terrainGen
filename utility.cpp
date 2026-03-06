@@ -1,5 +1,9 @@
 #include "utility.h"
 
+#include <ostream>
+#include <iostream>
+#include <QPointF>
+
 
 int8_t orient(QPointF src, QPointF dst, QPointF pt)
 {
@@ -12,4 +16,11 @@ int8_t orient(QPointF src, QPointF dst, QPointF pt)
   else orientation = dir::UNK;
 
   return orientation;
+}
+
+
+std::ostream& operator<<(std::ostream& os, QPointF& other)
+{
+  os << "(" << other.x() << ", " << other.y() << ")" ;
+  return os;
 }

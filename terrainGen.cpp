@@ -25,6 +25,7 @@
 #include "hexagon.h"
 #include "evDist.h"
 #include "mapDisplay.h"
+#include "graphicsLayer.h"
 
 #include "imageProps.h"
 
@@ -40,6 +41,7 @@ terrainGen::terrainGen() : QMainWindow(), m_pDisplay(nullptr), m_pScene(nullptr)
 
   m_pScene = new QGraphicsScene(this);
   m_pDisplay->setScene(m_pScene);
+
 }
 
 
@@ -48,13 +50,13 @@ terrainGen::~terrainGen()
 {
     if (m_vecGrid.size() > 0)
     {
-        std::vector<CHexagon*>::iterator iter = m_vecGrid.begin();
-        while (m_vecGrid.end() != iter)
-        {
-            delete (*iter);
-            (*iter) = nullptr;
-            ++iter;
-        }
+        //std::vector<CHexagon*>::iterator iter = m_vecGrid.begin();
+        //while (m_vecGrid.end() != iter)
+        //{
+        //    delete (*iter);
+        //    (*iter) = nullptr;
+        //    ++iter;
+        //}
 
         m_vecGrid.erase(m_vecGrid.begin(), m_vecGrid.end());
     }
@@ -172,6 +174,14 @@ void terrainGen::setupActions()
     m_pViewImageProps->setStatusTip("view/modify image settings");
     connect(m_pViewImageProps, SIGNAL(triggered()), this, SLOT(onViewImage()));
 
+    for (uint32_t ndx = 0; ndx < mapLayers; ndx++)
+    {
+      m_pViewLayer[ndx] = new QAction(QString("view/hide layer: %1").arg(layerName[ndx]), this);
+      m_pViewLayer[ndx]->setStatusTip(QString("toggle visibility of layer %1").arg(layerName[ndx]));
+      m_pViewLayer[ndx]->setData(QVariant(ndx));
+      connect(m_pViewLayer[ndx], &QAction::triggered, this, &terrainGen::onViewToggleVisibility);
+    }
+
     m_pSimCenters = new QAction("Plate centers");
     // m_pSimCenters->setShortcuts();
     m_pSimCenters->setStatusTip("set plate centers");
@@ -253,6 +263,8 @@ void terrainGen::setupMenu()
     viewMenu->addSeparator();
     viewMenu->addAction(m_pViewRedraw);
     viewMenu->addSeparator();
+    QMenu* viewLayers = viewMenu->addMenu("viewLayers");
+    for (uint32_t ndx = 0; ndx < mapLayers; ndx++) viewLayers->addAction(m_pViewLayer[ndx]);
     viewMenu->addAction(m_pViewImageProps);
 
     QMenu* editMenu = m_menubar->addMenu("&Edit");
@@ -293,7 +305,7 @@ void terrainGen::readSettings()
   m_imageWidth = settings.value("image/width", 1024).toInt();
   m_imageHeight = settings.value("image/height", 768).toInt();
   m_hexagonSize = settings.value("image/gridSize", 18).toInt();
-  m_hexagonOrien = settings.value("image/orientation", CHexagon::VERTICAL).toInt();
+  m_hexagonOrien = settings.value("image/orientation", hexagon::orien::VERTICAL).toInt();
   m_hexagonProps = settings.value("image/hexProps", 0).toInt();
   m_cntPlates = settings.value("simulation/plates", 0).toInt();
   m_timeStep = settings.value("simulation/timeStep", 100000).toInt();            // time step for simulation in years
@@ -421,8 +433,6 @@ void terrainGen::onFileNew()
 { 
     imagePropDlg    dlg(m_props, true);
 
-    qDebug() << "in onFileNew"; 
-
     // check if current document needs saving
     if ((m_fileName != "") && m_bDirty)                    // do we have a loaded document, and has it been modified
     {
@@ -435,7 +445,7 @@ void terrainGen::onFileNew()
     
     // clear the scene and clear the state variables...
     if (nullptr != m_centers) { delete[] m_centers; m_centers = nullptr;}
-    std::vector<CHexagon*>::iterator iter = m_vecGrid.begin();
+    std::vector<hexagon*>::iterator iter = m_vecGrid.begin();
     while (m_vecGrid.end() != iter)
     {
         delete (*iter);
@@ -448,9 +458,17 @@ void terrainGen::onFileNew()
     // get the properties of the new image
     int32_t  ret = dlg.exec();
 
+
+    // initialize array for layers
+    for (uint32_t ndx = 0; ndx < mapLayers; ndx++)
+    {
+      m_layers[ndx] = new graphicsLayer;
+      m_isVisible[ndx] = true;                      // by default all layers are visible
+    }
+
     if(QDialog::Accepted == ret)
     {
-        // TODO : check image size against hexagon size, make sure no overflow
+      adjustBorderSize();
         // TODO : generate our noise function here...
         
         QPen  pen(Qt::black);
@@ -458,18 +476,13 @@ void terrainGen::onFileNew()
 
         genGrid(pen);
 
-        QGraphicsRectItem* pBorder = new QGraphicsRectItem(0, 0, m_props->imageWidth, m_props->imageHeight, nullptr);
+        QGraphicsRectItem* pBorder = new QGraphicsRectItem(0, 0, m_props->imageWidth, m_props->imageHeight, m_layers[4]);
+        pBorder->setData(0, QVariant("border"));
         pBorder->setPen(pen);
 
-        // draw hexagons....
-        std::vector<CHexagon*>::iterator    iter = m_vecGrid.begin();
-        while (m_vecGrid.end() != iter)
-        {
-            (*iter)->draw(m_pScene);
-            ++iter;
-        }
 
-        m_pScene->addItem(pBorder);
+        // add all the layers to the scene
+        for (uint ndx = 0; ndx < mapLayers; ndx++) m_pScene->addItem(m_layers[ndx]);
 
     }
 
@@ -570,6 +583,36 @@ void terrainGen::onViewZoom() { qDebug() << "in onViewZoom"; }
 void terrainGen::onViewZoomIn() { qDebug() << "in onViewZoomIn"; }
 void terrainGen::onViewZoomOut() { qDebug() << "in onViewZoomOut"; }
 
+/************************************************************************************************************************
+ * Function: 
+ *
+ * Abstract:
+ *
+ * Input   :
+ *
+ * Returns :
+ *
+ * Written : Feb 2026 (gkhuber) 
+ ***********************************************************************************************************************/
+void terrainGen::onViewToggleVisibility()
+{
+  QAction* action = qobject_cast<QAction*>(sender());
+  uint32_t ndx = action->data().toInt();
+
+  std::cout << "in onViewToggleVisibility, index is " << ndx << std::endl;
+  if (m_isVisible[ndx])
+  {
+    m_layers[ndx]->hide();
+    m_isVisible[ndx] = false;
+  }
+  else
+  {
+    m_layers[ndx]->show();
+    m_isVisible[ndx] = true;
+  }
+  
+}
+
 void terrainGen::onViewRedraw() 
 { 
   uint8_t mode = m_props->hexagonProps;
@@ -577,10 +620,10 @@ void terrainGen::onViewRedraw()
   m_pScene->setSceneRect(QRectF(QPointF(0, 0), QSizeF(m_imageWidth, m_imageHeight)));
   
   m_pScene->clear();
-  for (CHexagon* h : m_vecGrid)
-  {
-    h->draw(m_pScene);
-  }
+  //for (CHexagon* h : m_vecGrid)
+  //{
+  //  h->draw(m_pScene);
+  //}
   m_pScene->update();
   
 }
@@ -646,9 +689,9 @@ void terrainGen::onSimCenters()
     m_plates = new platesT[m_props->cntPlates];
     m_centers = new QPointF[m_props->cntPlates];
 
-    if (m_hexagonOrien == CHexagon::HORIZONTAL)
+    if (m_hexagonOrien == hexagon::orien::HORIZONTAL)
       margin = m_hexagonSize * (1 + 2 * sin30);
-    else if (m_hexagonOrien == CHexagon::VERTICAL)
+    else if (m_hexagonOrien == hexagon::orien::VERTICAL)
       margin = 2 * m_hexagonSize * cos30;
     else
       CLogger::getInstance()->outMsg(cmdLine, CLogger::level::WARNING, "unknown hexagon orientation.");
@@ -680,27 +723,28 @@ void terrainGen::onSimCenters()
       CLogger::getInstance()->outMsg(cmdLine, CLogger::level::INFO, "plate %d: center is at (%.4f, %.4f)", ndx, tempX, tempY);
 
       m_centers[ndx] = QPointF(tempX, tempY);
-      m_plates[ndx].ndx = ndx + 1;                    // set index for plate
+      m_plates[ndx].ndx = ndx + 1;                                 // set index for plate
       m_plates[ndx].center_x = tempX;
       m_plates[ndx].center_y = tempY;
       if(ndx < 10) m_plates[ndx].color = plateColors[ndx];         // TODO: handle case if more than 12 plates
 
-      for (CHexagon* ph : m_vecGrid)
+      for (hexagon* ph : m_vecGrid)
       {
         if (ph->contains(m_centers[ndx]))
         {
-          ph->setState(bFilled | bColor | bDispCenter);
-          ph->setColor(m_plates[ndx].color);                     //ph->setColor(plateColors[ndx]);
-          ph->draw(m_pScene);
-          m_plates[ndx].vec.push_back(ph->getIndex());           // add hex to plate list
+          ph->setColor(m_plates[ndx].color);                       //ph->setColor(plateColors[ndx]);
+          ph->setStyle(bFilled | bColor | bDispCenter);
 
-          CLogger::getInstance()->outMsg(cmdLine, CLogger::level::DEBUG, "hexagon %d belongs to plate %d", ph->getIndex(), ndx);
+          //ph->draw(m_pScene);
+          m_plates[ndx].vec.push_back(ph->getId());                // add hex to plate list
 
+          CLogger::getInstance()->outMsg(cmdLine, CLogger::level::DEBUG, "hexagon %d belongs to plate %d", ph->getId(), ndx);
           break;
         }
-      }
-    }
+      } // end of for-each loop
+    } // end of for loop iterating over plates
 
+    this->update();
 
     m_pSimCenters->setEnabled(false);
     m_pSimPlates->setEnabled(true);
@@ -734,39 +778,39 @@ void terrainGen::onSimPlatesImpl()
     uint32_t   cntHexs = thePlate->vec.size();                                   // number of hexagons on the current border
     QColor     plateColor = thePlate->color;
 
-    for (uint32_t hexNdx = 0; hexNdx < cntHexs; hexNdx++)                        // iterate over the border hexagons
-    {
-      uint32_t gridID = thePlate->vec.at(hexNdx);                                // grid ID of the border hexagon we are working with
-      CHexagon* pHex = m_vecGrid.at(gridID);                                     // actual border hexagon we are working with.
-      double cent_x = pHex->getCenter().x();                                     // coordinates of the center of the hexagon
-      double cent_y = pHex->getCenter().y();
+    //for (uint32_t hexNdx = 0; hexNdx < cntHexs; hexNdx++)                        // iterate over the border hexagons
+    //{
+    //  uint32_t gridID = thePlate->vec.at(hexNdx);                                // grid ID of the border hexagon we are working with
+    //  CHexagon* pHex = m_vecGrid.at(gridID);                                     // actual border hexagon we are working with.
+    //  double cent_x = pHex->getCenter().x();                                     // coordinates of the center of the hexagon
+    //  double cent_y = pHex->getCenter().y();
 
-      for (uint32_t a = 0; a < 6; a++)                                             // iterate over the six neighbors
-      {
-        double tempX = cent_x + 2 * pHex->getSide() * cos((a * 60) * (pi / 180));    // neighbors coordinates
-        double tempY = cent_y + 2 * pHex->getSide() * sin((a * 60) * (pi / 180));
+    //  for (uint32_t a = 0; a < 6; a++)                                             // iterate over the six neighbors
+    //  {
+    //    double tempX = cent_x + 2 * pHex->getSide() * cos((a * 60) * (pi / 180));    // neighbors coordinates
+    //    double tempY = cent_y + 2 * pHex->getSide() * sin((a * 60) * (pi / 180));
 
-        for (CHexagon* testHex : m_vecGrid)                                        // iterate over all grid cells
-        {
-          if (testHex->contains(QPoint(tempX, tempY)))
-          {
-            //CLogger::getInstance()->outMsg(cmdLine, CLogger::level::DEBUG,"   potential border grid cell %d at (%.4f, %.4f)", testHex->getIndex(), tempX, tempY);
-            if (!((testHex->getState() & bFilled) == bFilled))                     // is cell filled, if so reject it.
-            {
-              testHex->setState(testHex->getState() | bFilled);
-              testHex->setState(testHex->getState() | bColor);
-              testHex->setColor(plateColor);
-              newBorder.push_back(testHex->getIndex());                             // cell was accepted add to new border
-              testHex->draw(m_pScene);
-            }
-            else
-            {
-              //CLogger::getInstance()->outMsg(cmdLine, CLogger::level::DEBUG, "   rejected");
-            }
-          } // end if block
-        }   // end grid search for loop
-      }     //end of neighbor search
-    }       // end of processing current neighbors
+    //    for (CHexagon* testHex : m_vecGrid)                                        // iterate over all grid cells
+    //    {
+    //      if (testHex->contains(QPoint(tempX, tempY)))
+    //      {
+    //        //CLogger::getInstance()->outMsg(cmdLine, CLogger::level::DEBUG,"   potential border grid cell %d at (%.4f, %.4f)", testHex->getIndex(), tempX, tempY);
+    //        if (!((testHex->getState() & bFilled) == bFilled))                     // is cell filled, if so reject it.
+    //        {
+    //          testHex->setState(testHex->getState() | bFilled);
+    //          testHex->setState(testHex->getState() | bColor);
+    //          testHex->setColor(plateColor);
+    //          newBorder.push_back(testHex->getIndex());                             // cell was accepted add to new border
+    //          testHex->draw(m_pScene);
+    //        }
+    //        else
+    //        {
+    //          //CLogger::getInstance()->outMsg(cmdLine, CLogger::level::DEBUG, "   rejected");
+    //        }
+    //      } // end if block
+    //    }   // end grid search for loop
+    //  }     //end of neighbor search
+    //}       // end of processing current neighbors
 
     thePlate->vec.clear();
     thePlate->vec = newBorder;                                                      // update border list
@@ -938,77 +982,219 @@ void terrainGen::onSaveConfig(imagePropDlg* pdlg)
         m_frequency[ndx] = freqs[ndx];
     }
 }
+/*
 
+    horizontal spacing is 1.0*width_hex, vertical spacing is 0.75*width_hex
+
+horizontal:
+
+
+*/
+/**********************************************************************************************************************
+ * Function: getGrid
+ *
+ * Abstract: This function generates either a verical or horizontal hexagonal grid.  This is done by modifying the 
+ *           starting location of the center for the initial hexagon by to represent the center of each hexagon in the
+ *           grid.
+ *           The following geometric facts are used to build the grid strucure (taken from 
+ *           https://www.redblobgames.com/grids/hexagons/ ).  In each case the variable size, s, is defined as the 
+ *           radius of the circumscribed circle -- i.e. distance from center to each vertex.
+ *                              vertical (pointy)                   horizontal (flat)
+ *           side length, l,         s                                    s\sqrt(3)
+ *           width, w,              s\sqrt(3)                             2*s
+ *           height, h,             2*s                                   s\sqrt(3) 
+ *           2-row width            2.5*w                                 2.5*w
+ *           2-row height           1.75*h                                2*h
+ *           center                 (0.5*w, 0.5*h)                        (0.5*w, 0.5*h)
+ *           horizontal spacing     1.0*w                                 0.75*w
+ *           vertical spacing       0.75*h                                1.0*h
+ * 
+ * Input   : void
+ *
+ * Returns : void.  modifies m_vecGrid 
+ *
+ * Written : Dec 2025 (gkhuber) 
+ *           Mar 2025 (gkhuber) -- modified to incorporate new hexagon class derived from QGraphicsItem.  Also split
+ *                                 out code to modify image size based on size of hexagon into a new function 
+ *                                 (adjustBorderSize) and invoke this function from 'onFileNew'.  Leaving this function
+ *                                 to just calculate the grid and the display them.  Also implementing the concept of 
+ *                                 layers, with the border going in the border-layer, and the grid going in the 
+ *                                 grid layer.
+ *********************************************************************************************************************/
 void terrainGen::genGrid(QPen pen)
 {
-  float width;       // width of hexagon, depends on orientation
-  float height;      // height of hexagon, depends on orientation
+  QPointF    initialCenter;  // center of top left hexagon
+  float      width;          // width of hexagon, depends on orientation
+  float      height;         // height of hexagon, depends on orientation
 
-  if (m_props->hexagonOrient == CHexagon::VERTICAL)
+  CLogger::getInstance()->outMsg(cmdLine, CLogger::level::INFO, "current size of border is (%.4f, %.4f, %.4f, %.4f)", 0, 0, m_props->imageWidth, m_props->imageHeight);
+
+  if (m_props->hexagonOrient == hexagon::orien::VERTICAL)
   {
-    width = m_props->hexagonSize * sqrt3 - 1;
     height = 2 * m_props->hexagonSize;
+    width = m_props->hexagonSize * sqrt3;
+    const double_t deltaHeight = 0.75 * height;
+    const double_t deltaWidth = width;
+    
+    // calculate center of first hexagon
+    initialCenter = QPointF(0.5 * width, 0.5 * height);
 
-    // sanity checks, make sure width of map will let hexagons fit cleanly 
-    float testH = m_props->imageWidth / width;
-    if (fabs(floor(testH) - testH) > epsilion)      // image width is not multiple of hexagon width
-      m_props->imageWidth = (floor(testH) + 1) * width;
-    // calculate number of rows needed
-    int rows;
-    float curHeight;
-    for (rows = 0, curHeight = 0; curHeight < m_props->imageHeight; rows++)
-    {
-      if (rows % 2 == 1) curHeight += 2 * m_props->hexagonSize; else curHeight += m_props->hexagonSize;
-    }
-    m_props->imageHeight = curHeight;
+    // calculate number of rows and columns
+    int32_t maxRow = ceil(m_props->imageHeight/(0.75*height));
+    int32_t maxCol = ceil(m_props->imageWidth/width);
 
-    int y = 0;
-    for (int dy = 0; dy < rows; dy++, y++)
+    // build grid
+    QPointF center = initialCenter;
+    for (int row = 0; row < maxRow; row++)
     {
-      float horStart = (y % 2 == 0 ? 0.5 * width : width);
-      float verStart = (y % 2 == 0 ? 0.5 * height : 0.50 * height);
-      for (int dx = 0; dx < floor(testH) + 1; dx++)
+      QPointF rowCenter = initialCenter + QPoint(0, deltaHeight * row);
+      // if row is odd, then need to offset the rowCenter
+      if ((row % 2))
       {
-        CHexagon* pTemp = new CHexagon(horStart + dx * width, verStart + y * (0.75 * height), m_props->hexagonSize, CHexagon::VERTICAL);
-        pTemp->setState(m_props->hexagonProps);         // set filled bit and set color bit
-        pTemp->setColor(-0.5);
-        m_vecGrid.push_back(pTemp);
+        rowCenter += QPointF(0.5 * width, 0);
+      }
+      
+      for (int col = 0; col < maxCol; col++)
+      {
+        center = rowCenter + QPoint(deltaWidth * col, 0);
+        hexagon* temp = new hexagon(center, m_props, m_layers[0]);
+
+        // TODO : construct label and center -- need to do it here so we have access to layers
+        QGraphicsEllipseItem* centerPt = new QGraphicsEllipseItem(center.x() - 2, center.y() - 2, 4, 4, m_layers[5]);
+        centerPt->setBrush(QBrush(Qt::black, Qt::SolidPattern));
+        QRectF bbox;
+        QString txt = temp->getLabel(&bbox);
+        if (bbox.width() < width - 5)              // hexagon is big enough to display label
+        {
+          QGraphicsTextItem* label = new QGraphicsTextItem(txt, m_layers[5]);
+          label->setPos(center - QPoint(0.5*bbox.width(), bbox.height()+3)/* + QPointF(-0.5 * bbox.width(), -0.5 * bbox.height()) */);
+        }
+        m_vecGrid.push_back(temp);
+      }
+    }
+  }
+  else if(m_props->hexagonOrient == hexagon::orien::HORIZONTAL)
+  {
+    width = 2 * m_props->hexagonSize;
+    height = m_props->hexagonSize * sqrt(3);
+    const double_t deltaHeight = 0.5*height;                           // space between adjacent cneters in y direction
+                                                                       // (half of vertical spacing to account for packing)
+    const double_t deltaWidth = 1.50 * width;                          // space between adjacent centers in x direction 
+                                                                       // (twice of horizontal spacing to account packing)
+    initialCenter = QPointF(0.5 * width, 0.5 * height);
+
+    hexagon* temp1 = new hexagon(initialCenter, m_props, m_layers[0]);
+    m_vecGrid.push_back(temp1);
+
+    // calculate number of rows and columns
+    int32_t maxRow = m_props->imageHeight / (0.5*height);
+    int32_t maxCol = ceil(m_props->imageWidth / (1.5*width));
+
+    // build grid
+    QPointF center = initialCenter;
+    for (int row = 0; row < maxRow; row++)
+    {
+      QPointF rowCenter = initialCenter + QPoint(0, deltaHeight * row);
+      // if row is odd, then need to offset the rowCenter
+      if ((row % 2))
+      {
+        rowCenter += QPointF(0.75 * width, 0);
+      }
+
+      for (int col = 0; col < maxCol; col++)
+      {
+        center = rowCenter + QPoint(deltaWidth * col, 0);
+        hexagon* temp = new hexagon(center, m_props, m_layers[0]);
+
+        // TODO : construct label and center -- need to do it here so we have access to layers
+        QGraphicsEllipseItem* centerPt = new QGraphicsEllipseItem(center.x() - 2, center.y() - 2, 4, 4, m_layers[5]);
+        centerPt->setBrush(QBrush(Qt::black, Qt::SolidPattern));
+        QRectF bbox;
+        QString txt = temp->getLabel(&bbox);
+        if (bbox.width() < width - 5)              // hexagon is big enough to display label
+        {
+          QGraphicsTextItem* label = new QGraphicsTextItem(txt, m_layers[5]);
+          label->setPos(center - QPoint(0.5 * bbox.width(), bbox.height() + 3));
+        }
+        m_vecGrid.push_back(temp);
       }
     }
   }
   else
   {
-    width = 2 * m_props->hexagonSize;
-    height = sqrt3 * m_props->hexagonSize - 1;
-    int rows;
+    QMessageBox::warning(nullptr, "geometry error", "unsupported geometry");
+    CLogger::getInstance()->outMsg(cmdLine, CLogger::level::ERR, "unsupported geometry, should be either VERTICAL(1) or "\
+                                   "HORIZONTAL(2).Orientation is : % d", (int)m_props->hexagonOrient);
+  }
+}
 
-    // sanity checks, make sure width of map will let hexagons fit cleanly 
-    // TODO : need to fix horizontal spacing....
-    float testH = m_props->imageWidth / (1.5 * m_props->hexagonSize);
-    if (fabs(floor(testH) - testH) > epsilion)                   // image width is not multiple of hexagon width
-      m_props->imageWidth = (floor(testH) + 1) * width;
-    // calculate number of rows needed
-    float testV = m_props->imageHeight / height;
-    if (fabs(floor(testV) - testV) > epsilion)
+
+/**********************************************************************************************************************
+ * Function: 
+ *
+ * Abstract:
+ *
+ * Input   :
+ *
+ * Returns :
+ *
+ * Written : Mar 2026 (gkhuber) 
+ *********************************************************************************************************************/
+void terrainGen::adjustBorderSize()
+{
+  double_t width;
+  double_t height;
+  double_t twoRowHeight;
+  double_t twoRowWidth;
+
+  if (m_props->hexagonOrient == hexagon::orien::VERTICAL)
+  {
+    height = 2 * m_props->hexagonSize;
+    width = m_props->hexagonSize * sqrt3;
+    twoRowHeight = 1.75 * height;
+    twoRowWidth = 2.50 * width;
+
+    // sanity checkes, make sure map dimensions will hold hexagons
+    double_t  cntHexagons = m_props->imageWidth / width;                  // how many hexagons will fit in defined width
+    double_t  fractionPart = cntHexagons - floor(cntHexagons);            // is there part of a hexagon left over?
+    if (fabs(fractionPart) > FLT_EPSILON)                                 // need to adjust imageWidth
     {
-      m_props->imageHeight = floor(testV) * height;
+      m_props->imageWidth = (floor(cntHexagons)/* + 1 */) * width;
     }
 
-    for (int y = 0; y < 2 * floor(testV) - 1; y++)
+    cntHexagons = m_props->imageHeight / twoRowHeight;
+    fractionPart = cntHexagons - floor(cntHexagons);
+    if (fabs(fractionPart) > FLT_EPSILON)                                 // need to adjust imageWidth
     {
-      float horStart = (y % 2 == 0 ? 0.5 * width : 1.25 * width);
-      float vertStart = (y % 2 == 0 ? 0.5 * height : 0.5 * height);
-
-      for (int dx = 0; dx < /*floor(testH) - 1*/m_props->imageWidth / width; dx++)
-      {
-        CHexagon* pTemp = new CHexagon(horStart + dx * (1.5 * width), vertStart + y * (0.5 * height), m_props->hexagonSize, CHexagon::HORIZONTAL);
-        pTemp->setState(m_props->hexagonProps);
-        pTemp->setColor(-0.5);
-        m_vecGrid.push_back(pTemp);
-      }
+      m_props->imageHeight = (floor(cntHexagons) + 1) * twoRowHeight;
     }
   }
+  else if (m_props->hexagonOrient == hexagon::orien::HORIZONTAL)
+  {
+    width = 2 * m_props->hexagonSize;
+    height = m_props->hexagonSize * sqrt(3);
+    twoRowWidth = 1.75 * width;
+    twoRowHeight = 1.50 * height;
 
+    // sanity checkes, make sure map dimensions will hold hexagons
+    // for width - must take into account the first and second rows
+    double_t  cntHexagons = m_props->imageWidth / twoRowWidth;
+    double_t  fractionPart = cntHexagons - floor(cntHexagons);
+    if (fabs(fractionPart) > FLT_EPSILON)                                 // need to adjust imageWidth
+    {
+      m_props->imageWidth = (floor(cntHexagons) + 1) * twoRowWidth;
+    }
 
+    cntHexagons = m_props->imageHeight / twoRowHeight;
+    fractionPart = cntHexagons - floor(cntHexagons);
+    if (fabs(fractionPart) > FLT_EPSILON)                                 // need to adjust imageHeight
+    {
+      m_props->imageHeight = (floor(cntHexagons) + 1) * twoRowHeight;
+    }
+  }
+  else
+  {
+    CLogger::getInstance()->outMsg(cmdLine, CLogger::level::WARNING, "Invalid orientation");
+  }
 }
 

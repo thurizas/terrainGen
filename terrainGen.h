@@ -3,10 +3,12 @@
 
 #include <QMainWindow>
 #include <QString>
+#include <QPointF>
 #include <random>
 
 #include "constants.h"
 #include "mapDisplay.h"
+#include "graphicsLayer.h"
 
 class QMenuBar;
 class QStatusBar;
@@ -14,7 +16,7 @@ class QGraphicsView;
 class QGraphicsScene;
 class imagePropDlg;
 class CGEVDist;
-class CHexagon;
+class hexagon;
 class QTimer;
 
 class terrainGen : public QMainWindow
@@ -25,6 +27,8 @@ public:
 
     terrainGen();
     ~terrainGen();
+
+
 
 public slots:
     void onFileOpen();
@@ -38,6 +42,7 @@ public slots:
     void onViewZoomOut();
     void onViewRedraw();
     void onViewImage();
+    void onViewToggleVisibility();
     void onSimCenters();
     void onSimPlates();
     void onSimMotion();
@@ -57,8 +62,10 @@ protected:
 private:
     // main window form components
     //QGraphicsView*  m_pDisplay;
-    mapDisplay* m_pDisplay;
+    mapDisplay*     m_pDisplay;
     QGraphicsScene* m_pScene;
+    graphicsLayer*  m_layers[mapLayers] = { nullptr };
+    bool            m_isVisible[mapLayers];
     QMenuBar*       m_menubar;
     QStatusBar*     m_statusbar;
 
@@ -101,12 +108,13 @@ private:
     QAction* m_pSimRun;
     QAction* m_pHelpHelp;
     QAction* m_pHelpAbout;
+    QAction* m_pViewLayer[mapLayers];
 
     // maintaining state of the application
     bool                     m_bDirty;
     bool                     m_bInit = false;
     QString                  m_fileName;
-    std::vector<CHexagon*>   m_vecGrid;
+    std::vector<hexagon*>    m_vecGrid;
     platesT*                 m_plates;
 
     std::random_device       m_rd;
@@ -121,6 +129,7 @@ private:
     void setupMenu();
 
     void doSave();
+    void adjustBorderSize();
     void genGrid(QPen);
     void onSimPlatesImpl();
 };

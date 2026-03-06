@@ -1,55 +1,61 @@
-#pragma once
+#ifndef _hexagon_h_
+#define _hexagon_h_
 
-#include <QRect>
-#include <QPoint>
-#include <QVector>
-#include <QColor>
+#include "constants.h"
 
-class QGraphicsScene;
+#include <QGraphicsItem>
+#include <QGraphicsItemGroup>
+#include <QPen>
+#include <QBrush>
 
-typedef unsigned char BYTE;
+#include "graphicsLayer.h"
 
-class CHexagon
+
+class hexagon : public QGraphicsItemGroup
 {
 public:
-    enum { HORIZONTAL =0, VERTICAL = 1, NONE=2 };
+  enum orien: std::uint8_t {UNKNOWN = 0, VERTICAL = 1, HORIZONTAL = 2};
+  enum style: std::uint8_t {NONE=0, HOLLOW=bHollow, SOLID=bFilled};
 
-    CHexagon(float, float, float, int mode = 0);
-    const CHexagon& operator=(const CHexagon& rhs);
-    ~CHexagon();
+  hexagon(QPointF center, struct imageProps*, QGraphicsItem* p = nullptr);
+  QRectF   boundingRect(); 
+  //void     paint(QPainter* painter, const QStyleOptionGraphicsItem* opt, QWidget* widget = nullptr) override;
+  
+  
+  static uint32_t getIndex() { return s_Ndx++; }
+  uint32_t getId() { return m_id; }
 
-    static uint32_t  getNextNdx() { return m_curNdx++; }
+  
+  QPointF  getCenter();
+  double_t getSize();
+  QString  getLabel(QRectF* pbbox = nullptr);
+  
 
-    uint32_t         getIndex() { return m_ndx; }
-    float            getSide() { return m_nSide; }
-    QVector<QPointF> getVertices() { return m_verticies; }
-    const char*      getLabel() { return m_pLabel; }
-    QPoint           getCenter() { return QPoint(m_nX, m_nY); }
-    QRect            getCntRect() { return QRect(m_nX - 1, m_nY - 1, m_nX + 1, m_nY + 1); }
-    void             setState(uint8_t s) { m_nState = s; }
-    uint8_t          getState() { return m_nState; }
-    void             setColor(QColor c) { m_fColor = c; }
-    QColor           getColor() { return m_fColor; }
+  bool contains(QPointF pt);
 
-    void             draw(QGraphicsScene*);
+  void    setStyle(uint8_t);
+  uint8_t getStyle() { return m_style; }
 
-    bool             contains(QPointF);
-    
-    void             makeLabel(int, int, int);
-    void             makeLabel(int);
+  void setColor(QColor c);
+  QColor getColor() { return m_borderColor; }
+
+  QGraphicsItemGroup* getGroup() { return this; }
+  
 
 private:
-  static uint32_t m_curNdx;
-  uint32_t        m_ndx;
-  float           m_nX;
-  float           m_nY;
-  float           m_nSide;
-  char*           m_pLabel;
-  int             m_nMode;
-  QColor          m_fColor;                            // color represented in RGB format
-  uint8_t         m_nState;                            // flags for state bit0 : filled(1), hollow(0)   bit1 : gray(0), color(1) bit2: noCenter(0), showCenter(1) bit3: noNdx(0), showNdx(1)
-
-    QVector<QPointF>   m_verticies;
-
-    void calcVertices();
+  static uint32_t                 s_Ndx;
+  uint32_t                        m_id;
+  std::array<QPointF, 6>          m_vertices;
+  QPointF                         m_center;             
+  double_t                        m_size;
+  uint8_t                         m_orient;
+  uint8_t                         m_style;
+  QColor                          m_borderColor;
+  QPen                            m_pen;
+  QBrush                          m_brush;
+  QRectF                          m_bbox;
+  QGraphicsPolygonItem*           m_hex;
 };
+
+#endif
+

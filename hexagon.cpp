@@ -1,7 +1,24 @@
-/*
- * file     : hexagon.cpp
+#include "hexagon.h"
+#include "constants.h"
+#include "logger.h"
+#include "utility.h"
+
+#include <QGraphicsItem>
+#include <QGraphicsItemGroup>
+#include <QPen>
+#include <QFontMetrics>
+#include <QPainter>
+
+
+enum orien : std::uint8_t { UNKNOWN = 0, VERTICAL = 1, HORIZONTAL = 1 };
+enum style : std::uint8_t { NONE = 0, SOLID = 1, HOLLOW = 2 };
+
+uint32_t hexagon::s_Ndx = 0;
+
+/*********************************************************************************************************************
+ * Function: 
  *
- * abstract : Contains the implementation of the hexagon class.  This class maintains a set of vertices for a
+  * abstract : Contains the implementation of the hexagon class.  This class maintains a set of vertices for a
  *            hexagon.  In a regular hexagon, the six internal angles are each 120 degrees.  Knowing just the
  *            side length, s, we can calculate some additional properties.  Consider the following diagram (in
  *            poor ascii art):
@@ -39,361 +56,253 @@
  *            sin(30) = 0.5
  *            cos(30) = 0.86602540
  *
- * neighbor calculations:  for a grid in this format (our default verticle layout):
- *
- *
- *       /\      /\
- *      /  \    /  \
- *     /    \  /    \
- *    /      \/      \      the neighbors are given by:
- *   |       |       |                          for moves:  NW     ,  NE,   ,   W    , E     , SW     ,   SE
- *   |       |       |            for an even row number : [-1, -1], [-1,  0], [0, -1], [0, 1], [1, -1], [1, 0]
- *   |  (0,0)| (0,1) |            for an odd row number  : [-1, 0] , [-1, +1], [0, -1], [0, 1]. [1, 0],  [1, 1]
- *   |       |       |
- *   \      / \      /
- *    \    /   \    /
- *     \  /     \  /
- *      \/       \/
- *      |         |
- *      |  (1,0)  |
- *      |         |
- *      |         |
- *       \       /
- *        \     /
- *         \   /
- *          \ /
-
-
- */
-#include "constants.h"
-#include "hexagon.h"
-#include "utility.h"
-
-#include <QGraphicsScene>
-#include <QGraphicsEllipseItem>
-#include <QFontMetrics>
-
-uint32_t CHexagon::m_curNdx = 0;
-
-// x coordinate of center, y coordinate of center, length of a side, orientation.
-CHexagon::CHexagon(float _x, float _y, float _s, int _m) : m_ndx(getNextNdx()), m_nX(_x), m_nY(_y), m_nSide(_s), m_pLabel(NULL), m_nMode(_m), m_nState(0)
-{
-    calcVertices();
-}
-
-
-const CHexagon& CHexagon::operator=(const CHexagon& rhs)
-{
-    if (this != &rhs)
-    {
-        this->m_nX = rhs.m_nX;
-        this->m_nY = rhs.m_nY;
-        this->m_nSide = rhs.m_nSide;
-        this->m_nMode = rhs.m_nMode;
-        this->m_nState = rhs.m_nState;       // true: filled, false: empty
-        this->m_pLabel = nullptr;
-
-        if (nullptr != rhs.m_pLabel)
-        {
-            uint32_t len = strlen(rhs.m_pLabel);
-            this->m_pLabel = new char[len + 1];
-            strcpy(this->m_pLabel, rhs.m_pLabel);
-        }
-
-        this->m_verticies = rhs.m_verticies;
-    }
-
-    return *this;
-}
-
-
-
-CHexagon::~CHexagon()
-{
-    if (NULL != m_pLabel)
-    {
-        delete[] m_pLabel;
-        m_pLabel = NULL;
-    }
-}
-
-
-// note: we print out column, row format to be consistent with https://www.redblobgames.com/grids/hexagons/
-void CHexagon::makeLabel(int ndx, int row, int col)
-{
-    m_pLabel = new char[13];
-    if (m_nMode == CHexagon::VERTICAL)
-        sprintf(m_pLabel, "%04d\n%03d,%03d", ndx, col, row);
-    else if (m_nMode == CHexagon::HORIZONTAL)
-        sprintf(m_pLabel, "%04d\n%03d,%03d", ndx, col, row);
-    else
-        fprintf(stderr, "unknown mode\n");
-}
-
-void CHexagon::makeLabel(int ndx)
-{
-    m_pLabel = new char[8];
-    sprintf(m_pLabel, "%04d", ndx);
-}
-
-
-void CHexagon::calcVertices()
-{
-    float nHeigth = m_nSide * sin30;                                    // heigth of the triange in comments
-    float nLength = m_nSide * cos30;                                    // base of triange in comments
-    float nHalfSide = m_nSide / 2;                                      // half of a side.
-    float nHalfHeigth = nHalfSide + nHeigth;                            // half the heigth of the hex
-
-    if (m_nMode == VERTICAL/*HORIZONTAL*/)
-    {
-        m_verticies.push_back(QPointF(m_nX, m_nY - nHalfHeigth));
-        m_verticies.push_back(QPointF(m_nX + nLength, m_nY - nHalfSide));
-        m_verticies.push_back(QPointF(m_nX + nLength, m_nY + nHalfSide));
-        m_verticies.push_back(QPointF(m_nX, m_nY + nHalfHeigth));
-        m_verticies.push_back(QPointF(m_nX - nLength, m_nY + nHalfSide));
-        m_verticies.push_back(QPointF(m_nX - nLength, m_nY - nHalfSide));
-        m_verticies.push_back(QPointF(m_nX, m_nY - nHalfHeigth));              // need this point to be able to close the figure
-    }
-    else if(m_nMode == HORIZONTAL/*VERTICAL*/)
-    {
-        m_verticies.push_back(QPointF(m_nX - nHalfSide, m_nY - nLength));
-        m_verticies.push_back(QPointF(m_nX + nHalfSide, m_nY - nLength));
-        m_verticies.push_back(QPointF(m_nX + (nHalfSide + nHeigth), m_nY));
-        m_verticies.push_back(QPointF(m_nX + nHalfSide, m_nY + nLength));
-        m_verticies.push_back(QPointF(m_nX - nHalfSide, m_nY + nLength));
-        m_verticies.push_back(QPointF(m_nX - (nHalfSide + nHeigth), m_nY));
-        m_verticies.push_back(QPointF(m_nX - nHalfSide, m_nY - nLength));      // need this point to be able to close the figure
-    }
-    else
-    {
-        fprintf(stderr, "unknown mode");
-    }
-}
-
-
-void CHexagon::draw(QGraphicsScene* pScene)
-{
-    QPolygonF      polygon;
-    Qt::BrushStyle style = Qt::NoBrush;           // set to a hollow pattern
-    QColor         color = Qt::black;
-
-    if ((m_nState & bDispCenter) == bDispCenter)     // draw center point if requested....
-    {
-        QGraphicsEllipseItem* pCenter = new QGraphicsEllipseItem(m_nX - 1, m_nY - 1, 2, 2, nullptr);
-        pCenter->setBrush(Qt::red);
-        pScene->addItem(pCenter);
-
-
-    }
-
-    if ((m_nState & bDispIndex) == bDispIndex)
-    {
-      // calculate space for a four digit number
-      QFont  font; 
-      QFontMetrics fm(font);
-      QString test("wwww");
-      QRect bb = fm.boundingRect(test);        // get bounding box for test string, centered at origin
-    
-      QRectF bbox = QRectF(m_nX - (bb.width() / 2), m_nY - (bb.height() / 2), bb.width(), bb.height());   //xlate bounding box to hex center
-      QString label = QString("%1").arg(m_ndx, 4, 10, QChar('0'));
-      QGraphicsSimpleTextItem*  pText = new QGraphicsSimpleTextItem();
-      pText->setText(label);
-      pText->setPos(pText->pos() + QPoint(m_nX - (3*bb.width()/8), m_nY- (4*bb.height()/8)));
-      pScene->addItem(pText);
-    }
-
-    if ((m_nState & bColor) == bColor)         // check for color bit
-    {
-      color = getColor();
-    }
-
-    if ((m_nState & bFilled) == bFilled)        // check for filled flag...
-    {
-        style = Qt::SolidPattern;
-    }
-
-    QPen  pen(color);
-    QBrush brush(color, style);
-
-    for(int ndx = 0; ndx < m_verticies.size(); ndx++)
-        polygon.append(m_verticies.at(ndx));
-
-    pScene->addPolygon(polygon, pen, brush);
-   
-}
-
-
-/**************************************************************************************************
- * Function: 
- *
- * Abstract: For simplisity we translate the hexagon so it is centered at the origin, this is done
- *           by the equations
- *                  dx = (pt.x() - m_nX)/radius
- *                  dy = (pt.y() - m_nY)/radius
- *           where radius is the distance from the center to any vertex.  This means that the point
- *           is (dx,dy) and the center is at (0,0) and the radius is one.  We check to see that the
- *           center and the point are on the same side of each edge.
- * 
- *           For a vertically orientated hexagon with side length of 1, the two vertical sides are 
- * 
- *                   vertical orientated                   horizontal orientated
- * verticies |  x                |  y             |  verticies |  x                |  y                |
- *         0 | c_x + r*\cos(30)  | c_y +\sin(60)  |          0 | c_x + r*\cos(120) | c_y + r*\sin(120) |
- *           |   = \sqrt{3}/2    |   = 1/2        |            |   = -0.5*r        |   = r*\sqrt(3)/2  |
- *         1 | c_x + r*\cos(330) | c_y +\sin(330) |          1 | c_x + r*\cos(60)  | c_y + r*\sin(60)  |
- *           |   = \sqrt{3}/2    |   = -1/        |            |   = 0.5*r         |   = r*\sqrt(3)/2  |
- *         2 | c_x + r*\cos(270) | c_y +\sin(270) |          2 | c_x + r*\cos(0)   | c_y + r*\sin(0)   | 
- *           |   = 0             |   = -r         |            |   = r             |   = 0             |
- *         3 | c_x + r*\cos(210) | c_y +\sin(210) |          3 | c_x + r*\cos(300) | c_y + r*\sin(300) |
- *           |   = -\sqrt{3}/2   |   -1/2         |            |   = 0.5*r         |   = -r*\sqrt(3)/2 |
- *         4 | c_x + r*\cos(150) | c_y +\sin(150) |          4 | c_x + r*\cos(240) | c_y + r*\sin(240) |
- *           |   = -\sqrt{3}/2   |    1/2         |            |   = -0.5*r        |   = -r*\sqrt(3)/2 |
- *         5 | c_x + r*\cos(90)  | c_y +\sin(90)  |          5 | c_x + r*\cos(180) | c_y + r*sin(180)  |
- *           |    = 0            |   = r          |            |   = -r            |   = 0             |
- *                                      
- *                             /\                                                                             
- *                            /0 \                                            0_ _ _ _ 1
- *                           /    \                                           /       \
- *                          / 5   1\                                         /         \
- *                          |      |                                        /           \
- *                          |   *  |                                       <5     *     2>
- *                          |4    2|                                        \           / 
- *                          \      /                                         \         /  
- *                           \    /                                           \_ _ _ _/
- *                            \3 /                                             4      3  
- *                    	       \/                                                                                
- *                                                                    
- *  equations of the sides:
- * 
- *  for the two vertical sides x = \sqrt{3}/2 and x = -\sqrt{3}\2 | horizontal side   y = \frac{\sqrt{3}}{2} and y = -\frac{\sqrt{3}}{2}
- *  for the upper right side   y = -\frac{x}{\sqrt{3}} + 1        |                   y = -x \sqrt{3} + \sqrt{3}
- *  for the upper left side    y = \frac{x}{\sqrt{3}} + 1         |                   y = x \sqrt{3} + \sqrt{3}
- *  for the bottom left side   y = -\frac{x}{\sqrt{3}} - 1        |                   y   x \sqrt{3} - \sqrt{3}
- *  for the bottom right side  y = \frax{x}{\sqrt{3}} - 1         |                   y = x \sqrt{3} - \sqrt{3}
- * 
- *consider the point (0.5, 0.5) w.r.t the top left side (with vertical orientation)
- *  for center                         test point                                  
- *   0 = 0\sqrt(3) + 1              0.5 = 0.5\sqrt(3) + 1                          
- *   0 < 1                          0.5 < 0.8660 +1 = 1.8669
- *   in both cases the right side is greater, thus interior point                  
- * 
- *consider the point (1.0,1.0) w.r.t. the top left side... 
- *  for center                         test point                                  
- *  0 = 0\sqrt(3) + 1               1.0 = 1.0\sqrt(3) + 1
- *  0 < 1                           1.0 < 1.7320 + 1
- * 
- *consider the point (0.5, 0.5) w.r.t the top left side (with horizontal orientation) 
- *  for center                         test point                                   
- *   0 = 0\sqrt(3) + \sqrt(3)          0.5 = 0.5\sqrt(3) + \sqrt(3)
- *   0 < 1.7320                        0.5 < 0.8660 +1.7320
- *   in both cases the right side is greater, thus interior point                   
- *  
- *consider the point (1.0,1.0) w.r.t. the top left side...           
- *  for center                         test point                                  
- *  0 = 0\sqrt(3) + \sqrt(3)        1.0 = 1.0\sqrt(3) + 1.7320
- *  0 < 1.7320                      1.0 < 1.7320 + 1.732
- * 
- *  see: https://stackoverflow.com/questions/5193331/is-a-point-inside-regular-hexagon
- * 
  * Input   :
- * 
+ *
  * Returns :
  *
- * Written : Feb 2026 (gkhuber) 
- *************************************************************************************************/
-bool CHexagon::contains(QPointF pt)
+ * Written : () 
+ ********************************************************************************************************************/
+hexagon::hexagon(QPointF c, struct imageProps* props, QGraphicsItem* p) : QGraphicsItemGroup(p), m_center(c), m_id(hexagon::getIndex()), m_size(props->hexagonSize), m_orient(props->hexagonOrient), m_style(hexagon::style::HOLLOW), m_borderColor(Qt::black)
 {
-  bool    res = false;
-  double  min_x, max_x, min_y, max_y;
-
-  float radius = sqrt((m_nX - m_verticies.at(0).x()) * (m_nX - m_verticies.at(0).x()) + (m_nY - m_verticies.at(0).y()) * (m_nY - m_verticies.at(0).y()));
-
-  float dx = (pt.x() - m_nX) / radius;
-  float dy = (pt.y() - m_nY) / radius;
-
-  if (m_nMode == CHexagon::HORIZONTAL)
+  // build the array of verticies in CCW winding order
+  if (m_orient == hexagon::orien::VERTICAL)
   {
-    min_x = m_verticies.at(0).x();                 // top left
-    min_y = m_verticies.at(0).y();
-    max_x = m_verticies.at(3).x();                 // bottom right
-    max_y = m_verticies.at(3).y();
+    double_t  height = m_size * sin30;
+    double_t  radius = m_size * cos30;
 
-    if ((min_x < pt.x()) && (pt.x() <= max_x) && (min_y < pt.y()) && (pt.y() <= max_y))            // point in internal square ??
-    {
-      res =  true;
-    }
-    
-    // build bounding box
-    min_x = m_verticies.at(5).x();
-    max_x = m_verticies.at(2).x();
-    min_y = m_verticies.at(0).y();
-    max_y = m_verticies.at(3).y();
+    m_vertices[0] = QPointF(m_center.x(), m_center.y() - ((m_size / 2) + height)); // ( 51.96,  0.0 )
+    m_vertices[1] = QPointF(m_center.x() + radius, m_center.y() - (m_size / 2));   // (103.92, 30.00)
+    m_vertices[2] = QPointF(m_center.x() + radius, m_center.y() + (m_size / 2));   // (103.92, 90.00)
+    m_vertices[3] = QPointF(m_center.x(), m_center.y() + ((m_size / 2) + height)); // (51.96, 120.00)
+    m_vertices[4] = QPointF(m_center.x() - radius, m_center.y() + (m_size / 2));   // (  0.00, 30.0 )
+    m_vertices[5] = QPointF(m_center.x() - radius, m_center.y() - (m_size / 2));   // (  0.00, 90.0 )
 
-    if (!((min_x < pt.x()) && (pt.x() <= max_x) && (min_y < pt.y()) && (pt.y() <= max_y)))           // point not in bounding box??
-    {
-      res =  false;
-    }
-    else
-    {
-      // check diagonals
-      int8_t tlOrient = orient(m_verticies.at(0), m_verticies.at(5), pt);
-      int8_t blOrient = orient(m_verticies.at(5), m_verticies.at(4), pt); 
-      int8_t brOrient = orient(m_verticies.at(3), m_verticies.at(2), pt); 
-      int8_t trOrient = orient(m_verticies.at(2), m_verticies.at(1), pt); 
-
-      if ((dir::LEFT == tlOrient) && (dir::LEFT == blOrient) && (dir::LEFT == brOrient) && (dir::LEFT == trOrient))
-      {
-        res = true;
-      }
-      else
-      {
-        res = false;
-      }
-    }
+    m_bbox.setTopLeft(QPointF(m_vertices[5].x(), m_vertices[0].y()));
+    m_bbox.setBottomRight(QPointF(m_vertices[1].x(), m_vertices[3].y()));
+    m_bbox.setHeight(m_vertices[3].y() - m_vertices[0].y());
+    m_bbox.setWidth(m_vertices[1].x() - m_vertices[5].x());
   }
-  else if (m_nMode == CHexagon::VERTICAL)
+  else
   {
-    min_x = m_verticies.at(5).x();                            // top left
-    min_y = m_verticies.at(5).y();
-    max_x = m_verticies.at(2).x();                            // bottom right
-    max_y = m_verticies.at(2).y();
+    double_t height = m_size * cos30;
+    double_t radius = m_size * sin30;
 
-    if ((min_x < pt.x()) && (pt.x() <= max_x) && (min_y < pt.y()) && (pt.y() <= max_y))            // point in internal square ??
-    {
-      res = true;
-    }
+    m_vertices[0] = QPointF(m_center.x() - (m_size / 2)         , m_center.y() - height);  // ( 30,  0.0)
+    m_vertices[1] = QPointF(m_center.x() + (m_size / 2)         , m_center.y() - height);  // ( 90,  0.0)
+    m_vertices[2] = QPointF(m_center.x() + (m_size / 2) + radius, m_center.y());           // (120,  51.96)
+    m_vertices[3] = QPointF(m_center.x() + (m_size / 2)         , m_center.y() + height);  // ( 90, 103.92)
+    m_vertices[4] = QPointF(m_center.x() - (m_size / 2)         , m_center.y() + height);  // ( 30, 103.92)
+    m_vertices[5] = QPointF(m_center.x() - (m_size / 2) - radius, m_center.y());           // (  0,  51.96)
 
-    // build bounding box
-    min_x = m_verticies.at(4).x();
-    max_x = m_verticies.at(1).x();
-    min_y = m_verticies.at(0).y();
-    max_y = m_verticies.at(3).y();
-
-    if (!((min_x < pt.x()) && (pt.x() <= max_x) && (min_y < pt.y()) && (pt.y() <= max_y)))           // point not in bounding box??
-    {
-      res = false;
-    }
-    else
-    {
-      // check diagonals
-      int8_t trOrient = orient(m_verticies.at(1), m_verticies.at(0), pt);
-      int8_t tlOrient = orient(m_verticies.at(0), m_verticies.at(5), pt);
-      int8_t blOrient = orient(m_verticies.at(4), m_verticies.at(3), pt);
-      int8_t brOrient = orient(m_verticies.at(3), m_verticies.at(2), pt);
-
-      if ((dir::LEFT == trOrient) && (dir::LEFT == tlOrient) && (dir::LEFT == blOrient) && (dir::LEFT == brOrient))
-      {
-        res = true;
-      }
-      else
-      {
-        res = false;
-      }
-    }
+    m_bbox.setTopLeft(QPointF(m_vertices[5].x(), m_vertices[0].y()));
+    m_bbox.setBottomRight(QPointF(m_vertices[3].x(), m_vertices[2].y()));
+    m_bbox.setHeight(m_vertices[4].y() - m_vertices[0].y());
+    m_bbox.setWidth(m_vertices[2].x() - m_vertices[5].x());
   }
 
-  return res;
+  // build a QPolygon to hold verticies, addind first to end to force a close polygon
+  QPolygonF h;
+  for (uint32_t ndx = 0; ndx <= 6; ndx++)
+  {
+    h << m_vertices[ndx % 6];
+  }
+  
+  //set up pen & brush characteristics
+  m_brush.setColor(m_borderColor);
+  if ((m_style & hexagon::style::HOLLOW) == hexagon::style::HOLLOW)
+    m_brush.setStyle(Qt::NoBrush);
+  else if ((m_style & hexagon::style::SOLID) == hexagon::style::SOLID)
+    m_brush.setStyle(Qt::SolidPattern);
+
+
+  m_pen.setColor(m_borderColor);
+  m_pen.setWidth(1);
+  //m_pen.setBrush(m_brush);
+
+  m_hex = new QGraphicsPolygonItem(h);
+  m_hex->setPen(m_pen);
+
+  // add edges to the QGraphicsItemGroup.
+  addToGroup(m_hex);
+}
+  
+QRectF hexagon::boundingRect()
+{
+  if (m_orient == hexagon::orien::VERTICAL)
+  {
+
+  }
+  else if (m_orient == hexagon::orien::HORIZONTAL)
+  {
+
+  }
+  else
+  {
+    CLogger::getInstance()->outMsg(cmdLine, CLogger::level::ERR, "hexagon::boundingRect -- orientation is unset");
+  }
+
+  return m_bbox;
+}
+
+//void hexagon::paint(QPainter* painter, const QStyleOptionGraphicsItem* opt, QWidget* widget)
+//{
+//  painter->setPen(m_pen);
+//  painter->setBrush(m_brush);
+//
+//  QGraphicsItemGroup::paint(painter, opt, widget);                         // let base class do all of the work
+//
+//}
+
+
+QPointF  hexagon::getCenter()
+{
+  return m_center;
 }
 
 
+double_t hexagon::getSize()
+{
+  return m_size;
+}
 
+QString hexagon::getLabel(QRectF* pbbox)
+{
+  QString ret = "";
+
+  ret = QString("%1").arg((int)m_id, 4);
+
+  if (pbbox != nullptr)
+  {
+    QFont font;
+    QFontMetrics fm(font);
+
+    pbbox->setLeft(0);
+    pbbox->setTop(0);
+    pbbox->setWidth(fm.horizontalAdvance("4444"));
+    pbbox->setHeight(fm.height());
+  }
+
+  return ret;
+}
+
+/**********************************************************************************************************************
+ * Function: contains
+ *
+ * Abstract: this function determines if the hexagon contains the given point,  this test is performed in three steps,
+ *           (1) first is the point located in or on the inner square - if so return true
+ *           (2) second, is the point contained in the outer bounding box - if not return false
+ *           (3) third, determine orientation to four diagonal edges - if all are left return true.
+ *           These tests are different based on the orientation, see below
+ *                
+ *                    /\                                
+ *                   /0 \                                   0_ _ _ _ 1
+ *                  /    \                                  /       \
+ *                 /      \                                /         \
+ *                 |5     1|                              /           \
+ *                 |   *   |                             <5     *     2>
+ *                 |4     2|                              \           / 
+ *                 \      /|                               \         /  
+ *                  \    / |                                \_ _ _ _/
+ *                   \3 /  |                                4      3 
+ *                  	\/___|                            
+ *                                                      
+ *          inner rectangle: v5 -> v2                       v0 -> v3
+ *          bounding box     (v5_x, v0_y) -> (v1_x, v3_y)   (v5_x, v0_y) -> (v2_x, v3_y)
+ *          edges to check   e(v0, v5), e(v4, v3)           e(v0, v5), e(v5, v4)
+ *                           e(v3, v2), e(v1, v0)           e(v3, v2), e(v2, v1)
+ * 
+ * Input   : pt -- [in] QPointF object to check membership in internal and border points.
+ *
+ * Returns : boolean, true if point belongs to the hexagon false otherwise
+ *
+ * Written : Mar 2026 (gkhuber) 
+ *********************************************************************************************************************/
+bool hexagon::contains(QPointF pt)
+{
+  bool inHex = false;
+
+  if (m_orient == hexagon::orien::VERTICAL)
+  {
+    if((m_vertices.at(5).x() <= pt.x()) && (pt.x() < m_vertices.at(2).x()) &&   // check membership in inner rectangle
+      (m_vertices.at(5).y() < pt.y()) && (pt.y() < m_vertices.at(2).y()))
+    {
+      inHex = true;
+    }
+    else
+    {
+      if (!((m_vertices.at(5).x() <= pt.x()) && (pt.x() < m_vertices.at(1).x()) &&  // check memberhip in bounding box
+        (m_vertices.at(0).y() <= pt.y()) && (pt.y() < m_vertices.at(3).y())))
+      {
+        inHex = false;
+      }
+      else
+      {
+        int8_t o1 = orient(m_vertices.at(0), m_vertices.at(5), pt);
+        int8_t o2 = orient(m_vertices.at(4), m_vertices.at(3), pt);
+        int8_t o3 = orient(m_vertices.at(3), m_vertices.at(2), pt);
+        int8_t o4 = orient(m_vertices.at(1), m_vertices.at(0), pt);
+
+        if ((o1 == dir::LEFT) && (o2 == dir::LEFT) && (o3 == dir::LEFT) && (o4 == dir::LEFT))
+        {
+          inHex = true;
+        }
+      }
+    }
+  }  // end hexagon::orien::VERTICAL checks
+  else if (m_orient == hexagon::orien::HORIZONTAL)
+  {
+    if ((m_vertices.at(0).x() <= pt.x()) && (pt.x() < m_vertices.at(3).x()) &&   // check membership in inner rectangle
+      (m_vertices.at(0).y() < pt.y()) && (pt.y() < m_vertices.at(3).y()))
+    {
+      inHex = true;
+    }
+    else
+    {
+      if (!((m_vertices.at(5).x() <= pt.x()) && (pt.x() < m_vertices.at(2).x()) &&  // check memberhip in bounding box
+        (m_vertices.at(0).y() <= pt.y()) && (pt.y() < m_vertices.at(3).y())))
+      {
+        inHex = false;
+      }
+      else
+      {
+        int8_t o1 = orient(m_vertices.at(0), m_vertices.at(5), pt);
+        int8_t o2 = orient(m_vertices.at(5), m_vertices.at(4), pt);
+        int8_t o3 = orient(m_vertices.at(3), m_vertices.at(2), pt);
+        int8_t o4 = orient(m_vertices.at(2), m_vertices.at(1), pt);
+
+        if ((o1 == dir::LEFT) && (o2 == dir::LEFT) && (o3 == dir::LEFT) && (o4 == dir::LEFT))
+        {
+          inHex = true;
+        }
+      }
+    }
+  }
+  else
+  {
+    CLogger::getInstance()->outMsg(cmdLine, CLogger::level::WARNING, "unknown or illegal orientation");
+  }
+
+  return inHex;
+}
+
+void hexagon::setStyle(uint8_t s)
+{
+  m_style = s;
+
+  m_brush.setColor(m_borderColor);
+  if ((m_style & hexagon::style::HOLLOW) == hexagon::style::HOLLOW)
+    m_brush.setStyle(Qt::NoBrush);
+  else if ((m_style & hexagon::style::SOLID) == hexagon::style::SOLID)
+    m_brush.setStyle(Qt::SolidPattern);
+
+  m_hex->setBrush(m_brush);
+  m_hex->setPen(m_pen);
+}
+
+void hexagon::setColor(QColor c)
+{
+  m_borderColor = c;
+
+  m_pen.setColor(m_borderColor);
+  m_pen.setWidth(1);
+}
