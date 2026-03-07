@@ -62,20 +62,20 @@ uint32_t hexagon::s_Ndx = 0;
  *
  * Written : () 
  ********************************************************************************************************************/
-hexagon::hexagon(QPointF c, struct imageProps* props, QGraphicsItem* p) : QGraphicsItemGroup(p), m_center(c), m_id(hexagon::getIndex()), m_size(props->hexagonSize), m_orient(props->hexagonOrient), m_style(hexagon::style::HOLLOW), m_borderColor(Qt::black)
+hexagon::hexagon(QPointF c, struct imageProps* props, QGraphicsItem* p) : QGraphicsItemGroup(p), m_center(c), m_id(hexagon::getIndex()), m_side(props->hexagonSize), m_orient(props->hexagonOrient), m_style(hexagon::style::HOLLOW), m_borderColor(Qt::black)
 {
   // build the array of verticies in CCW winding order
   if (m_orient == hexagon::orien::VERTICAL)
   {
-    double_t  height = m_size * sin30;
-    double_t  radius = m_size * cos30;
+    double_t  height = m_side * sin30;
+    double_t  radius = m_side * cos30;
 
-    m_vertices[0] = QPointF(m_center.x(), m_center.y() - ((m_size / 2) + height)); // ( 51.96,  0.0 )
-    m_vertices[1] = QPointF(m_center.x() + radius, m_center.y() - (m_size / 2));   // (103.92, 30.00)
-    m_vertices[2] = QPointF(m_center.x() + radius, m_center.y() + (m_size / 2));   // (103.92, 90.00)
-    m_vertices[3] = QPointF(m_center.x(), m_center.y() + ((m_size / 2) + height)); // (51.96, 120.00)
-    m_vertices[4] = QPointF(m_center.x() - radius, m_center.y() + (m_size / 2));   // (  0.00, 30.0 )
-    m_vertices[5] = QPointF(m_center.x() - radius, m_center.y() - (m_size / 2));   // (  0.00, 90.0 )
+    m_vertices[0] = QPointF(m_center.x(), m_center.y() - ((m_side / 2) + height)); // ( 51.96,  0.0 )
+    m_vertices[1] = QPointF(m_center.x() + radius, m_center.y() - (m_side / 2));   // (103.92, 30.00)
+    m_vertices[2] = QPointF(m_center.x() + radius, m_center.y() + (m_side / 2));   // (103.92, 90.00)
+    m_vertices[3] = QPointF(m_center.x(), m_center.y() + ((m_side / 2) + height)); // (51.96, 120.00)
+    m_vertices[4] = QPointF(m_center.x() - radius, m_center.y() + (m_side / 2));   // (  0.00, 30.0 )
+    m_vertices[5] = QPointF(m_center.x() - radius, m_center.y() - (m_side / 2));   // (  0.00, 90.0 )
 
     m_bbox.setTopLeft(QPointF(m_vertices[5].x(), m_vertices[0].y()));
     m_bbox.setBottomRight(QPointF(m_vertices[1].x(), m_vertices[3].y()));
@@ -84,15 +84,15 @@ hexagon::hexagon(QPointF c, struct imageProps* props, QGraphicsItem* p) : QGraph
   }
   else
   {
-    double_t height = m_size * cos30;
-    double_t radius = m_size * sin30;
+    double_t height = m_side * cos30;
+    double_t radius = m_side * sin30;
 
-    m_vertices[0] = QPointF(m_center.x() - (m_size / 2)         , m_center.y() - height);  // ( 30,  0.0)
-    m_vertices[1] = QPointF(m_center.x() + (m_size / 2)         , m_center.y() - height);  // ( 90,  0.0)
-    m_vertices[2] = QPointF(m_center.x() + (m_size / 2) + radius, m_center.y());           // (120,  51.96)
-    m_vertices[3] = QPointF(m_center.x() + (m_size / 2)         , m_center.y() + height);  // ( 90, 103.92)
-    m_vertices[4] = QPointF(m_center.x() - (m_size / 2)         , m_center.y() + height);  // ( 30, 103.92)
-    m_vertices[5] = QPointF(m_center.x() - (m_size / 2) - radius, m_center.y());           // (  0,  51.96)
+    m_vertices[0] = QPointF(m_center.x() - (m_side / 2)         , m_center.y() - height);  // ( 30,  0.0)
+    m_vertices[1] = QPointF(m_center.x() + (m_side / 2)         , m_center.y() - height);  // ( 90,  0.0)
+    m_vertices[2] = QPointF(m_center.x() + (m_side / 2) + radius, m_center.y());           // (120,  51.96)
+    m_vertices[3] = QPointF(m_center.x() + (m_side / 2)         , m_center.y() + height);  // ( 90, 103.92)
+    m_vertices[4] = QPointF(m_center.x() - (m_side / 2)         , m_center.y() + height);  // ( 30, 103.92)
+    m_vertices[5] = QPointF(m_center.x() - (m_side / 2) - radius, m_center.y());           // (  0,  51.96)
 
     m_bbox.setTopLeft(QPointF(m_vertices[5].x(), m_vertices[0].y()));
     m_bbox.setBottomRight(QPointF(m_vertices[3].x(), m_vertices[2].y()));
@@ -144,26 +144,6 @@ QRectF hexagon::boundingRect()
   return m_bbox;
 }
 
-//void hexagon::paint(QPainter* painter, const QStyleOptionGraphicsItem* opt, QWidget* widget)
-//{
-//  painter->setPen(m_pen);
-//  painter->setBrush(m_brush);
-//
-//  QGraphicsItemGroup::paint(painter, opt, widget);                         // let base class do all of the work
-//
-//}
-
-
-QPointF  hexagon::getCenter()
-{
-  return m_center;
-}
-
-
-double_t hexagon::getSize()
-{
-  return m_size;
-}
 
 QString hexagon::getLabel(QRectF* pbbox)
 {

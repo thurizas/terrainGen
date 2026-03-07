@@ -194,6 +194,11 @@ void terrainGen::setupActions()
     m_pSimPlates->setEnabled(false);
     connect(m_pSimPlates, SIGNAL(triggered()), this, SLOT(onSimPlates()));
 
+    m_pSimPrepPlates = new QAction("finalize plates");
+    m_pSimPrepPlates->setStatusTip("finalize plates, assign intial motion vector and elevations");
+    m_pSimPrepPlates->setEnabled(false);
+    connect(m_pSimPrepPlates, SIGNAL(triggered()), this, SLOT(onSimPrepPlates()));
+
     m_pSimMotion = new QAction("plate motion");
     // m_pSimCenters->setShortcuts();
     m_pSimMotion->setStatusTip("generate plate motion vectors");
@@ -274,6 +279,7 @@ void terrainGen::setupMenu()
     QMenu* simMenu = m_menubar->addMenu("Simulation");
     simMenu->addAction(m_pSimCenters);
     simMenu->addAction(m_pSimPlates);
+    simMenu->addAction(m_pSimPrepPlates);
     simMenu->addAction(m_pSimMotion);
     simMenu->addAction(m_pSimTimeDelta);
     simMenu->addSeparator();
@@ -774,62 +780,83 @@ void terrainGen::onSimPlatesImpl()
 
     std::vector<uint32_t> newBorder = {};
 
-    platesT* thePlate = &m_plates[plateNdx];                                     // plate we are currently growing
-    uint32_t   cntHexs = thePlate->vec.size();                                   // number of hexagons on the current border
+    platesT* thePlate = &m_plates[plateNdx];                                       // plate we are currently growing
+    uint32_t   cntHexs = thePlate->vec.size();                                     // number of hexagons on the current border
     QColor     plateColor = thePlate->color;
 
-    //for (uint32_t hexNdx = 0; hexNdx < cntHexs; hexNdx++)                        // iterate over the border hexagons
-    //{
-    //  uint32_t gridID = thePlate->vec.at(hexNdx);                                // grid ID of the border hexagon we are working with
-    //  CHexagon* pHex = m_vecGrid.at(gridID);                                     // actual border hexagon we are working with.
-    //  double cent_x = pHex->getCenter().x();                                     // coordinates of the center of the hexagon
-    //  double cent_y = pHex->getCenter().y();
+    for (uint32_t hexNdx = 0; hexNdx < cntHexs; hexNdx++)                          // iterate over the border hexagons
+    {
+      uint32_t gridID = thePlate->vec.at(hexNdx);                                  // grid ID of the border hexagon we are working with
+      hexagon* pHex = m_vecGrid.at(gridID);                                        // actual border hexagon we are working with.
+      double cent_x = pHex->getCenter().x();                                       // coordinates of the center of the hexagon
+      double cent_y = pHex->getCenter().y();
+      
+      for (uint32_t a = 0; a < 6; a++)                                             // iterate over the six neighbors
+      {
+        double tempX = cent_x + 2 * pHex->getSide() * cos((a * 60) * (pi / 180));  // neighbors coordinates
+        double tempY = cent_y + 2 * pHex->getSide() * sin((a * 60) * (pi / 180));
 
-    //  for (uint32_t a = 0; a < 6; a++)                                             // iterate over the six neighbors
-    //  {
-    //    double tempX = cent_x + 2 * pHex->getSide() * cos((a * 60) * (pi / 180));    // neighbors coordinates
-    //    double tempY = cent_y + 2 * pHex->getSide() * sin((a * 60) * (pi / 180));
+        for (hexagon* testHex : m_vecGrid)                                         // iterate over all grid cells
+        {
+          if (testHex->contains(QPoint(tempX, tempY)))
+          {
+            //CLogger::getInstance()->outMsg(cmdLine, CLogger::level::DEBUG,"   potential border grid cell %d at (%.4f, %.4f)", testHex->getIndex(), tempX, tempY);
+            if (!((testHex->getStyle() & bFilled) == bFilled))                     // is cell filled, if so reject it.
+            {
+              testHex->setColor(plateColor);
+              testHex->setStyle(bFilled | bColor);
 
-    //    for (CHexagon* testHex : m_vecGrid)                                        // iterate over all grid cells
-    //    {
-    //      if (testHex->contains(QPoint(tempX, tempY)))
-    //      {
-    //        //CLogger::getInstance()->outMsg(cmdLine, CLogger::level::DEBUG,"   potential border grid cell %d at (%.4f, %.4f)", testHex->getIndex(), tempX, tempY);
-    //        if (!((testHex->getState() & bFilled) == bFilled))                     // is cell filled, if so reject it.
-    //        {
-    //          testHex->setState(testHex->getState() | bFilled);
-    //          testHex->setState(testHex->getState() | bColor);
-    //          testHex->setColor(plateColor);
-    //          newBorder.push_back(testHex->getIndex());                             // cell was accepted add to new border
-    //          testHex->draw(m_pScene);
-    //        }
-    //        else
-    //        {
-    //          //CLogger::getInstance()->outMsg(cmdLine, CLogger::level::DEBUG, "   rejected");
-    //        }
-    //      } // end if block
-    //    }   // end grid search for loop
-    //  }     //end of neighbor search
-    //}       // end of processing current neighbors
+              newBorder.push_back(testHex->getId());                             // cell was accepted add to new border
+              break;
+            }
+          } // end if block
+        }   // end grid search for loop
+      }     // end of neighbor search
+    }       // end of processing current neighbors
 
     thePlate->vec.clear();
     thePlate->vec = newBorder;                                                      // update border list
     if (newBorder.size() > 0) plateChange = true;
-    CLogger::getInstance()->outMsg(cmdLine, CLogger::level::DEBUG, "plate %d changed this step %s", plateNdx, (plateChange ? "yes" : "no"));
+    mapChange |= plateChange;
+
+    CLogger::getInstance()->outMsg(cmdLine, CLogger::level::DEBUG, "plate %d grew this step %s, map changed this step", plateNdx, (plateChange ? "yes" : "no"), (mapChange ? "yes" : "no"));
   } // end of plate loop (i.e. plateNdx loop)
 
-  mapChange |= plateChange;
-  CLogger::getInstance()->outMsg(cmdLine, CLogger::level::DEBUG, "map changed this step %d : %s", step, (mapChange ? "yes" : "no"));
+
+  //CLogger::getInstance()->outMsg(cmdLine, CLogger::level::DEBUG, "map changed this step %d : %s", step, (mapChange ? "yes" : "no"));
 
   if (!mapChange)                                                                  // map did not change on this iteration
   {
     m_timer->stop();
     m_pSimPlates->setEnabled(false);
-    m_pSimMotion->setEnabled(true);
+    m_pSimPrepPlates->setEnabled(true);
   }
 
   step++;
+  this->update();
+}
 
+
+
+/**************************************************************************************************
+ * Function:
+ *
+ * Abstract:  tectonic plates velocity is between 1 to 10 cm a year, most are in the range of 2 to
+ *            5 cm a year.  assume a normally distributed velociy with \mu = 4.5, and \sigma = 2.0
+ *
+ * Input   :  // TODO : convert list of hex's into a single polygon, use verticies as internal points for Delauncy
+              //        trianulation
+              // TODO : assign elevation to eacho vertex
+ *
+ * Returns :
+ *
+ * Written : ()
+ *************************************************************************************************/
+void terrainGen::onSimPrepPlates()
+{
+
+  m_pSimPrepPlates->setEnabled(false);
+  m_pSimMotion->setEnabled(true);
 }
 
 /**************************************************************************************************
@@ -846,6 +873,8 @@ void terrainGen::onSimPlatesImpl()
  *************************************************************************************************/
 void terrainGen::onSimMotion() 
 {
+
+
   std::normal_distribution<double_t>  norDist(4.5, 2.0);
   std::uniform_real_distribution<double_t> dirDist(0.0, 360.0);
   // TODO : all plates have been drawn -- generate border and store as a path in the plate structure
@@ -929,6 +958,7 @@ void terrainGen::onSimRun()
 
     onSimCenters();        // generate plates centers, if not done...
     onSimPlates();         // generate plates if not done ....
+    onSimPrepPlates();     // finalize plate construction ....
     onSimMotion();         // generate initial movement vector ....
 
     for (uint64_t ndx = m_curTime; ndx <= m_maxTime; ndx += m_timeStep)

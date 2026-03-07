@@ -19,15 +19,15 @@ public:
 
   hexagon(QPointF center, struct imageProps*, QGraphicsItem* p = nullptr);
   QRectF   boundingRect(); 
-  //void     paint(QPainter* painter, const QStyleOptionGraphicsItem* opt, QWidget* widget = nullptr) override;
   
   
   static uint32_t getIndex() { return s_Ndx++; }
   uint32_t getId() { return m_id; }
 
   
-  QPointF  getCenter();
-  double_t getSize();
+  QPointF  getCenter() { return m_center; }
+  double_t getRadius() { return m_side/sqrt3; }
+  double_t getSide() { return m_side;}
   QString  getLabel(QRectF* pbbox = nullptr);
   
 
@@ -47,7 +47,8 @@ private:
   uint32_t                        m_id;
   std::array<QPointF, 6>          m_vertices;
   QPointF                         m_center;             
-  double_t                        m_size;
+  double_t                        m_radius;              // radius of circumscribed circle
+  double_t                        m_side;                // length of a side of the hexagon
   uint8_t                         m_orient;
   uint8_t                         m_style;
   QColor                          m_borderColor;

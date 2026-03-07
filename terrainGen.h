@@ -45,6 +45,7 @@ public slots:
     void onViewToggleVisibility();
     void onSimCenters();
     void onSimPlates();
+    void onSimPrepPlates();
     void onSimMotion();
     void onSimTimeDelta();
     void onSimRun();
@@ -103,6 +104,7 @@ private:
     QAction* m_pEditPlateColors;
     QAction* m_pSimCenters;
     QAction* m_pSimPlates;
+    QAction* m_pSimPrepPlates;
     QAction* m_pSimMotion;
     QAction* m_pSimTimeDelta;
     QAction* m_pSimRun;
