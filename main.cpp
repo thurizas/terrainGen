@@ -27,28 +27,40 @@
 void showVersion(const char*);
 void showHelp(const char*);
 
-
-
 int main(int argc, char** argv)
 {
+	uint8_t   dbgLevel = CLogger::level::WARNING;
 	uint8_t   cntPlates = NUM_PLATES;
 	uint32_t  winWidth = WIDTH;
 	uint32_t  winHeight = HEIGHT;
 	int32_t   gridW = GRID_W;
 	int32_t   gridH = GRID_H;
-	bool      viewPlates = false;
+	bool      viewPlates = true;
+	bool      drawGradicule = true;
 
 	int choice = -1;
 	int ret = EXIT_SUCCESS;
 
 	allocConsole();
 
-	while (-1 != (choice = getopt(argc, argv, "dvh")))
+	while (-1 != (choice = getopt(argc, argv, "dgpP:vh")))
 	{
 		switch (choice)
 		{
-		case 'd':
+		case 'd':                           // set debug level
+			dbgLevel--;
+			if (dbgLevel < CLogger::level::INFO) dbgLevel = CLogger::level::INFO;
+			break;
 
+		case 'p':                           // toggle view plates
+			viewPlates = !viewPlates;
+			break;
+
+		case 'P':                           // select projection
+
+			break;
+		case 'g':                           // toggle draw gradicule
+			drawGradicule = !drawGradicule;
 			break;
 
 		case 'v':
@@ -83,6 +95,39 @@ int main(int argc, char** argv)
 	
 	tectonics         tecPlates(cntPlates, gridW, gridH, &gen);
 
+	std::vector<sf::VertexArray> gradicule;
+	int cntLatLines = 180.0f / grad.slices() + 1.0;   
+	int cntLonLines = 360.0f / grad.segments();       
+	sf::Color lineColor = sf::Color::Yellow;
+
+	// build horizontal lines.
+	for (int32_t row = 0; row < cntLatLines; row++)
+	{
+		sf::VertexArray va(sf::PrimitiveType::LineStrip); 
+
+		for (int32_t col = 0; col <= cntLonLines; col++)
+		{
+			int ndx = row * (cntLonLines + 1) + col;
+			auto [x, y] = grad.getPoint(ndx);
+			va.append(sf::Vertex{ {static_cast<float_t>(y), static_cast<float_t>(x)}, lineColor });
+		}
+		gradicule.push_back(va);
+	}
+	// build vertical lines  us 0,13,26,39
+	for (int32_t col = 0; col < cntLonLines + 1; col++)
+	{
+		sf::VertexArray va(sf::PrimitiveType::LineStrip);
+
+		for (int32_t row = 0; row < cntLatLines; row++)
+		{
+			uint32_t ndx = col + row * (cntLonLines + 1);
+			auto [x, y] = grad.getPoint(ndx);
+			va.append(sf::Vertex{ {static_cast<float_t>(y), static_cast<float_t>(x)}, lineColor });
+		}
+
+		gradicule.push_back(va);
+	}
+
 	sf::VertexArray vertexArray(sf::PrimitiveType::Triangles);
 	vertexArray.resize(gridW * gridH * 6);
 
@@ -94,6 +139,7 @@ int main(int argc, char** argv)
 			if (const auto* keyPressed = event->getIf<sf::Event::KeyPressed>())
 			{
 				if (keyPressed->code == sf::Keyboard::Key::Space) viewPlates = !viewPlates;
+				if (keyPressed->code == sf::Keyboard::Key::Escape) window.close();
 				//if (keyPressed->code == sf::Keyboard::Key::R)
 				//{
 				//	grid.assign(GRID_W * GRID_H, Cell{});
@@ -105,66 +151,61 @@ int main(int argc, char** argv)
 
 		tecPlates.updateState();
 
-		//// populate projected coordinate models
-		//for (int32_t y = 0; y < gridH; y++)
-		//{
-		//	for (int32_t x = 0; x < gridW; x++)
-		//	{
-		//		int32_t ndx = y * gridW + x;
-		//		cell c = tecPlates.getCell(ndx);
-
-		//		sf::Color cellColor = sf::Color::Transparent;
-
-		//		if (c.plateId != 0xFF)
-		//		{
-		//			if (viewPlates)
-		//			{
-		//				cellColor = tecPlates.getPlateColor(c.plateId);   
-		//			}
-		//			else
-		//			{
-		//				if (c.elevation < -0.1f) cellColor = sf::Color(12, 24, 82);         // Trench
-		//				else if (c.elevation < 0.0f) cellColor = sf::Color(32, 80, 168);    // Ocean Shelf
-		//				else if (c.elevation < 0.25f) cellColor = sf::Color(55, 125, 55);   // Plains
-		//				else if (c.elevation < 0.60f) cellColor = sf::Color(115, 85, 55);   // Mountains
-		//				else                          cellColor = sf::Color(240, 240, 245); // Glaciers
-		//			}
-		//		}
-
-		//		// compute bounding corners
-		//		sf::Vector2f p0 = proj.forwardEqualEarth(c.lat, c.lon);
-		//		sf::Vector2f p1 = proj.forwardEqualEarth(c.lat, c.lon + (2.0f * PI / gridW));
-		//		sf::Vector2f p2 = proj.forwardEqualEarth(c.lat - (PI / gridH), c.lon);
-		//		sf::Vector2f p3 = proj.forwardEqualEarth(c.lat - (PI / gridH), (2.0f * PI / gridW));
-
-		//		int vertexNdx = ndx * 6;
-
-		//		// set up vertex array, CCW winding order
-		//		vertexArray[vertexNdx + 0] = sf::Vertex{ p0, cellColor };
-		//		vertexArray[vertexNdx + 1] = sf::Vertex{ p1, cellColor };
-		//		vertexArray[vertexNdx + 2] = sf::Vertex{ p2, cellColor };
-		//		vertexArray[vertexNdx + 3] = sf::Vertex{ p1, cellColor };
-		//		vertexArray[vertexNdx + 4] = sf::Vertex{ p3, cellColor };
-		//		vertexArray[vertexNdx + 5] = sf::Vertex{ p2, cellColor };
-		//	}
-		//}
-
-		// setup grid 
-
-
-
-		window.clear(sf::Color(10, 12, 18));
-		// setup grid - draw horizontal lines
-		// points 0 - 11   0 to 2\pi/\DeltaLon - 1 
-		// point 12 - 23
-		// 13 row: 180/15 = 12
-		for (int row = 0; row <= 180 / 15; row++)
+		// populate projected coordinate models
+		for (int32_t y = 0; y < gridH; y++)
 		{
-			std::cout << "drawing row " << row << " using points " << row * 12 << " to " << row * 12 + 11 << std::endl;
+			for (int32_t x = 0; x < gridW; x++)
+			{
+				int32_t ndx = y * gridW + x;
+				cell c = tecPlates.getCell(ndx);
+
+				sf::Color cellColor = sf::Color::Transparent;
+
+				if (c.plateId != 0xFF)
+				{
+					if (viewPlates)
+					{
+						cellColor = tecPlates.getPlateColor(c.plateId);   
+					}
+					else
+					{
+						if (c.elevation < -0.1f) cellColor = sf::Color(12, 24, 82);         // Trench
+						else if (c.elevation < 0.0f) cellColor = sf::Color(32, 80, 168);    // Ocean Shelf
+						else if (c.elevation < 0.25f) cellColor = sf::Color(55, 125, 55);   // Plains
+						else if (c.elevation < 0.60f) cellColor = sf::Color(115, 85, 55);   // Mountains
+						else                          cellColor = sf::Color(240, 240, 245); // Glaciers
+					}
+				}
+
+				// compute bounding corners
+				sf::Vector2f p0 = proj.forwardEqualEarth(c.lat, c.lon);
+				sf::Vector2f p1 = proj.forwardEqualEarth(c.lat, c.lon + (2.0f * PI / gridW));
+				sf::Vector2f p2 = proj.forwardEqualEarth(c.lat - (PI / gridH), c.lon);
+				sf::Vector2f p3 = proj.forwardEqualEarth(c.lat - (PI / gridH), (2.0f * PI / gridW));
+				
+						int vertexNdx = ndx * 6;
+
+				// set up vertex array, CCW winding order
+				vertexArray[vertexNdx + 0] = sf::Vertex{ p0, cellColor };
+				vertexArray[vertexNdx + 1] = sf::Vertex{ p1, cellColor };
+				vertexArray[vertexNdx + 2] = sf::Vertex{ p2, cellColor };
+				vertexArray[vertexNdx + 3] = sf::Vertex{ p1, cellColor };
+				vertexArray[vertexNdx + 4] = sf::Vertex{ p3, cellColor };
+				vertexArray[vertexNdx + 5] = sf::Vertex{ p2, cellColor };
+			}
 		}
 
+		window.clear(sf::Color(10, 12, 18));
+		window.draw(vertexArray);
 
-		//window.draw(vertexArray);
+		if (drawGradicule)  // Z-order is determined by order of drawing, bug gradicule last so it is visible
+		{
+			for (sf::VertexArray va : gradicule)
+			{
+				window.draw(va);
+			}
+		}
+
 		window.display();
 	}
 

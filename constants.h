@@ -12,6 +12,7 @@ static const uint16_t PATCH = 0;
 static const double epsilion = DBL_EPSILON;
 static const double PI = 3.1415926535897932384626433832795;
 static const double DEG2RAD = PI / 180.0;
+static const double RAD2DEG = 180.0 / PI;
 static const double sqrt2 = 1.4142135623730950488016887242097;
 static const double sqrt3 = 1.7320508075688772935274463415059;
 static const double sin30 = 0.5000000000000000000000000000000;      // sin30 = 1/2

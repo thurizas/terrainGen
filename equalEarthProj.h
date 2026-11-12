@@ -14,7 +14,7 @@ public:
   equalEarthProj(float_t winWidth, float_t winHeight);
   ~equalEarthProj();
 
-  std::pair<double_t, double_t> convert(double_t lat, double_t);
+  std::pair<double_t, double_t> convert(double_t lat, double_t lon);
 
   sf::Vector2f forwardEqualEarth(float_t lat, float_t lon);
 
