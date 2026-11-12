@@ -4,8 +4,8 @@
 #include <cstdint>
 #include <SFML/Graphics.hpp>
 
-static const uint8_t MAJOR = 1;
-static const uint8_t MINOR = 0;
+static const uint8_t MAJOR = 0;
+static const uint8_t MINOR = 2;
 static const uint16_t PATCH = 0;
 
 // Mathematical and physical constants....
