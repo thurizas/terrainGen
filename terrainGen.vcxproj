@@ -112,6 +112,7 @@
     <ClCompile Include="gradicule.cpp" />
     <ClCompile Include="logger.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="Mollweide.cpp" />
     <ClCompile Include="tectonics.cpp" />
     <ClCompile Include="XGetopt.cpp" />
   </ItemGroup>
@@ -121,6 +122,7 @@
     <ClInclude Include="equalEarthProj.h" />
     <ClInclude Include="gradicule.h" />
     <ClInclude Include="logger.h" />
+    <ClInclude Include="Mollweide.h" />
     <ClInclude Include="projection.h" />
     <ClInclude Include="tectonics.h" />
     <ClInclude Include="XGetopt.h" />

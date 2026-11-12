@@ -5,11 +5,11 @@
 #include <SFML/Graphics.hpp>
 
 static const uint8_t MAJOR = 0;
-static const uint8_t MINOR = 2;
+static const uint8_t MINOR = 3;
 static const uint16_t PATCH = 0;
 
 // Mathematical and physical constants....
-static const double epsilion = DBL_EPSILON;
+static const double EPSILON = DBL_EPSILON;
 static const double PI = 3.1415926535897932384626433832795;
 static const double DEG2RAD = PI / 180.0;
 static const double RAD2DEG = 180.0 / PI;

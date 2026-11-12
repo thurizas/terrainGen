@@ -44,6 +44,9 @@
     <ClCompile Include="gradicule.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Mollweide.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="constants.h">
@@ -68,6 +71,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="projection.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Mollweide.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

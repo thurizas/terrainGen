@@ -1,7 +1,10 @@
 #include <SFML/Graphics.hpp>
+#include <algorithm>
+#include <string>
 #include <vector>
 #include <random>
 #include <cmath>
+#include <cctype>
 
 
 
@@ -12,6 +15,7 @@
 #include "gradicule.h"
 #include "projection.h"
 #include "equalEarthProj.h"
+#include "Mollweide.h"
 
 #ifdef __WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -22,10 +26,12 @@
 #endif
 
 #include <iostream>
-#include <QApplication>
 
+bool isInteger(const char* bp);
 void showVersion(const char*);
 void showHelp(const char*);
+
+enum projType:int16_t {UNDEFINED=-1, EQUALEARTH = 1, MOLLWEIDE = 2};
 
 int main(int argc, char** argv)
 {
@@ -35,6 +41,8 @@ int main(int argc, char** argv)
 	uint32_t  winHeight = HEIGHT;
 	int32_t   gridW = GRID_W;
 	int32_t   gridH = GRID_H;
+	uint32_t  seed = 0xFFFFFFFF;
+    projType  proj = projType::EQUALEARTH;
 	bool      viewPlates = true;
 	bool      drawGradicule = true;
 
@@ -43,7 +51,7 @@ int main(int argc, char** argv)
 
 	allocConsole();
 
-	while (-1 != (choice = getopt(argc, argv, "dgpP:vh")))
+	while (-1 != (choice = getopt(argc, argv, "dgpP:s:vh")))
 	{
 		switch (choice)
 		{
@@ -57,8 +65,15 @@ int main(int argc, char** argv)
 			break;
 
 		case 'P':                           // select projection
-
-			break;
+		{
+			std::string projName = std::string(optarg);
+			std::transform(projName.begin(), projName.end(), projName.begin(), [](uint8_t ch) { return std::tolower(ch);});
+			if(projName == "equalearth") {	proj = projType::EQUALEARTH;}
+			else if(projName == "mollweide") {proj = projType::MOLLWEIDE;}
+			else { proj = projType::UNDEFINED; }
+		}
+		break;		
+	
 		case 'g':                           // toggle draw gradicule
 			drawGradicule = !drawGradicule;
 			break;
@@ -66,6 +81,11 @@ int main(int argc, char** argv)
 		case 'v':
 			showVersion(argv[0]);
 			return(ret);
+
+		case 's' :
+			if(isInteger(optarg))
+				seed = atoi(optarg);
+			break;
 
 		case '?':
 			std::cout << "Unknown command line option " << optarg[optind] << std::endl;
@@ -82,11 +102,20 @@ int main(int argc, char** argv)
 	pLogger->outMsg(cmdLine, CLogger::level::SUCCESS, "initialized logging engine");
 
 	std::random_device rd;
-	std::mt19937       gen(rd());
+	std::mt19937       gen;
+	if(seed != 0xFFFFFFFF)    // use provided seed
+		gen.seed(seed);
+	else
+		gen.seed(rd());       // use the random device to get a seed.
 
+	projection* pproj = nullptr;
 	// setup projection we are using...
-	equalEarthProj    proj(winWidth, winHeight);                
-	gradicule         grad(&proj);
+	switch (proj)
+	{
+		case projType::EQUALEARTH: pproj = new equalEarthProj(winWidth, winHeight); break;
+		case projType::MOLLWEIDE: pproj = new MollweideProj(winWidth, winHeight, 170); break;  // TODO : 170 determinded emperically so both projections are ~same size, need a better way
+	}               
+	gradicule         grad(pproj);
 
 
 	sf::RenderWindow window(sf::VideoMode({winWidth, winHeight}), "Spherical Tectonics (Equal Earth Projection)");
@@ -113,7 +142,7 @@ int main(int argc, char** argv)
 		}
 		gradicule.push_back(va);
 	}
-	// build vertical lines  us 0,13,26,39
+	// build vertical lines  
 	for (int32_t col = 0; col < cntLonLines + 1; col++)
 	{
 		sf::VertexArray va(sf::PrimitiveType::LineStrip);
@@ -138,7 +167,8 @@ int main(int argc, char** argv)
 			if (event->is<sf::Event::Closed>()) window.close();
 			if (const auto* keyPressed = event->getIf<sf::Event::KeyPressed>())
 			{
-				if (keyPressed->code == sf::Keyboard::Key::Space) viewPlates = !viewPlates;
+				if (keyPressed->code == sf::Keyboard::Key::Space) { viewPlates = !viewPlates; puts("toggling plates"); }
+				if(keyPressed->code == sf::Keyboard::Key::G) { drawGradicule = !drawGradicule; puts("toggling grid"); }
 				if (keyPressed->code == sf::Keyboard::Key::Escape) window.close();
 				//if (keyPressed->code == sf::Keyboard::Key::R)
 				//{
@@ -178,14 +208,13 @@ int main(int argc, char** argv)
 				}
 
 				// compute bounding corners
-				sf::Vector2f p0 = proj.forwardEqualEarth(c.lat, c.lon);
-				sf::Vector2f p1 = proj.forwardEqualEarth(c.lat, c.lon + (2.0f * PI / gridW));
-				sf::Vector2f p2 = proj.forwardEqualEarth(c.lat - (PI / gridH), c.lon);
-				sf::Vector2f p3 = proj.forwardEqualEarth(c.lat - (PI / gridH), (2.0f * PI / gridW));
+				sf::Vector2f p0 = {static_cast<float_t>(pproj->convert(c.lat, c.lon).first), static_cast<float_t>(pproj->convert(c.lat, c.lon).second)};
+				sf::Vector2f p1 = {static_cast<float_t>(pproj->convert(c.lat, c.lon + (2.0f * PI / gridW)).first), static_cast<float_t>(pproj->convert(c.lat, c.lon + (2.0f * PI / gridW)).second)};
+				sf::Vector2f p2 = {static_cast<float_t>(pproj->convert(c.lat - (PI / gridH), c.lon).first), static_cast<float_t>(pproj->convert(c.lat - (PI / gridH), c.lon).second)};
+				sf::Vector2f p3 = {static_cast<float_t>(pproj->convert(c.lat - (PI / gridH), (2.0f * PI / gridW)).first),static_cast<float_t>(pproj->convert(c.lat - (PI / gridH), (2.0f * PI / gridW)).second) };
 				
-						int vertexNdx = ndx * 6;
-
-				// set up vertex array, CCW winding order
+				int vertexNdx = ndx * 6;
+				//// set up vertex array, CCW winding order
 				vertexArray[vertexNdx + 0] = sf::Vertex{ p0, cellColor };
 				vertexArray[vertexNdx + 1] = sf::Vertex{ p1, cellColor };
 				vertexArray[vertexNdx + 2] = sf::Vertex{ p2, cellColor };
@@ -212,13 +241,9 @@ int main(int argc, char** argv)
  	return ret;
 }
 
-void showVersion(const char* name)
-{
-	std::cout << name << " A procedural terrain generator, based on plate tectonics.  Version " << static_cast<int>(MAJOR) << "." << static_cast<int>(MINOR) << "." << static_cast<int>(PATCH) << std::endl;
-}
 
 /**********************************************************************************************************************
- * Function: 
+ * Function: isInteger
  *
  * Abstract:
  *
@@ -226,13 +251,55 @@ void showVersion(const char* name)
  *
  * Returns :
  *
- * Written : () 
+ * Written : Nov 2026(gkhuber)
+ *********************************************************************************************************************/
+bool isInteger(const char * bp)
+{
+	const char* ep = bp + strlen(bp);
+	return ep == std::find_if(bp, ep, [](char ch) {return !std::isdigit(ch); });
+}
+
+
+/**********************************************************************************************************************
+ * Function: showVersion
+ *
+ * Abstract: 
+ *
+ * Input   :
+ *
+ * Returns :
+ *
+ * Written : Nov 2026(gkhuber)
+ *********************************************************************************************************************/
+void showVersion(const char* name)
+{
+	std::cout << name << " A procedural terrain generator, based on plate tectonics.  Version " << static_cast<int>(MAJOR) << "." << static_cast<int>(MINOR) << "." << static_cast<int>(PATCH) << std::endl;
+}
+
+
+/**********************************************************************************************************************
+ * Function: showHelp
+ *
+ * Abstract:
+ *
+ * Input   :
+ *
+ * Returns :
+ *
+ * Written : Nov 2026(gkhuber)
  *********************************************************************************************************************/
 void showHelp(const char* name)
 {
-	std::cout << name << "A procedural terrain generator, based on plate tectonics." << std::endl;
-	std::cout << "Usage: " << name << " [options]  \nThe options are:" << std::endl;
-	std::cout << "v             displays program version, and then exits" << std::endl;
-	std::cout << "h             displays a short usage screen (this screen) and then exits" << std::endl;
+	std::cout << name << "A procedural terrain generator, based on plate tectonics.               " << std::endl;
+	std::cout << "Usage: " << name << " [options]  \nThe options are:                             " << std::endl;
+    std::cout << "d             increase the debug verbosity, can be used multiple times          " << std::endl;
+	std::cout << "g             toggle display of grid (also works during execution)              " << std::endl;
+	std::cout << "p             toggle display of plates (aslo works during execution)            " << std::endl;
+	std::cout << "P             sets the projection for the 2D map.  Currently accepts one of:    " << std::endl;
+	std::cout << "                  \"equalEath\", \"mollweide\"                                  " << std::endl;
+	std::cout << "s <num>       use number as the PRNG engine seed, if not given use a random seed" << std::endl;
+	std::cout << "v             displays program version, and then exits                          " << std::endl;
+	std::cout << "h             displays a short usage screen (this screen) and then exits        " << std::endl;
 
 }
+
