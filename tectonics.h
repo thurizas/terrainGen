@@ -41,19 +41,25 @@ public:
 	tectonics(uint8_t, int32_t, int32_t, std::mt19937*);
 	~tectonics();
 
-	void updateState();
+	void updateState(float_t);
+
+	void resetTime() { m_elapsedTime = 0.0f; }
 	struct cell getCell(int32_t);
+	float_t getElapsedTime() { return m_elapsedTime; }
+	float_t getDeltaTime() { return m_dt; }
 
 	sf::Color getPlateColor(int32_t);
 
 private:
 	uint8_t                  m_nbrPlates;
-	std::vector<plate>       m_plates;           // vector of plate structures
-	std::vector<int>         m_seeds;            // vector of seed location for Voronoi flood fill
-	std::vector<struct cell> m_grid;             // cells on sphere
+	std::vector<plate>       m_plates;            // vector of plate structures
+	std::vector<int>         m_seeds;             // vector of seed location for Voronoi flood fill
+	std::vector<struct cell> m_grid;              // cells on sphere
 	int32_t                  m_gridW;
 	int32_t                  m_gridH;
 	std::mt19937*            m_pGen;
+	float_t                  m_elapsedTime = 0.0f; // in million years
+	float_t                  m_dt = 0.5f;          // 1.0 million years per step
 
 	void initGrid();
 	void initTectonics();

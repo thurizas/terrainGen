@@ -27,6 +27,7 @@
 
 #include <iostream>
 
+void buildGradicule(gradicule*, std::vector<sf::VertexArray>*);
 bool isInteger(const char* bp);
 void showVersion(const char*);
 void showHelp(const char*);
@@ -45,6 +46,8 @@ int main(int argc, char** argv)
     projType  proj = projType::EQUALEARTH;
 	bool      viewPlates = true;
 	bool      drawGradicule = true;
+	bool      isPaused = false;
+	bool      stepOnce = false;
 
 	int choice = -1;
 	int ret = EXIT_SUCCESS;
@@ -115,61 +118,61 @@ int main(int argc, char** argv)
 		case projType::EQUALEARTH: pproj = new equalEarthProj(winWidth, winHeight); break;
 		case projType::MOLLWEIDE: pproj = new MollweideProj(winWidth, winHeight, 170); break;  // TODO : 170 determinded emperically so both projections are ~same size, need a better way
 	}               
-	gradicule         grad(pproj);
+	
 
 
 	sf::RenderWindow window(sf::VideoMode({winWidth, winHeight}), "Spherical Tectonics (Equal Earth Projection)");
 	window.setFramerateLimit(60);
 
-	
 	tectonics         tecPlates(cntPlates, gridW, gridH, &gen);
 
+	gradicule         grad(pproj);
 	std::vector<sf::VertexArray> gradicule;
+	buildGradicule(&grad, &gradicule);
+
 	int cntLatLines = 180.0f / grad.slices() + 1.0;   
 	int cntLonLines = 360.0f / grad.segments();       
 	sf::Color lineColor = sf::Color::Yellow;
 
-	// build horizontal lines.
-	for (int32_t row = 0; row < cntLatLines; row++)
-	{
-		sf::VertexArray va(sf::PrimitiveType::LineStrip); 
-
-		for (int32_t col = 0; col <= cntLonLines; col++)
-		{
-			int ndx = row * (cntLonLines + 1) + col;
-			auto [x, y] = grad.getPoint(ndx);
-			va.append(sf::Vertex{ {static_cast<float_t>(y), static_cast<float_t>(x)}, lineColor });
-		}
-		gradicule.push_back(va);
-	}
-	// build vertical lines  
-	for (int32_t col = 0; col < cntLonLines + 1; col++)
-	{
-		sf::VertexArray va(sf::PrimitiveType::LineStrip);
-
-		for (int32_t row = 0; row < cntLatLines; row++)
-		{
-			uint32_t ndx = col + row * (cntLonLines + 1);
-			auto [x, y] = grad.getPoint(ndx);
-			va.append(sf::Vertex{ {static_cast<float_t>(y), static_cast<float_t>(x)}, lineColor });
-		}
-
-		gradicule.push_back(va);
-	}
-
 	sf::VertexArray vertexArray(sf::PrimitiveType::Triangles);
 	vertexArray.resize(gridW * gridH * 6);
 
+	// set up display font
+	sf::Font hudFont;
+	if (!hudFont.openFromFile(R"(C:\Users\geohu\AppData\Local\Microsoft\Windows\Fonts\intelone-mono-font-family-regular.ttf)")) 
+	{
+		CLogger::getInstance()->outMsg(0, CLogger::level::ERR, "failed to load HUD font");
+	}
+
+	sf::Text timeText(hudFont);
+	timeText.setCharacterSize(12);
+	timeText.setFillColor(sf::Color(220, 225, 235));
+
+	sf::Clock simClock;
+	float_t accumulatorSec = 0.0f;
+	constexpr float_t FIXED_STEP_SEC = 1.0f / 30.0f;                 // 30 geological ticks per second
+	constexpr float_t MAX_FRAME_DT = 0.25f;                          // clamp to avoid 'spiral of death' on window drag
+
+
 	while (window.isOpen())
 	{
+		float_t frameDt = std::min(simClock.restart().asSeconds(), MAX_FRAME_DT);
+
 		while (const auto event = window.pollEvent())
 		{
 			if (event->is<sf::Event::Closed>()) window.close();
 			if (const auto* keyPressed = event->getIf<sf::Event::KeyPressed>())
 			{
-				if (keyPressed->code == sf::Keyboard::Key::Space) { viewPlates = !viewPlates; puts("toggling plates"); }
-				if(keyPressed->code == sf::Keyboard::Key::G) { drawGradicule = !drawGradicule; puts("toggling grid"); }
-				if (keyPressed->code == sf::Keyboard::Key::Escape) window.close();
+				if (keyPressed->code == sf::Keyboard::Key::Space) { viewPlates = !viewPlates; }
+				else if (keyPressed->code == sf::Keyboard::Key::G) { drawGradicule = !drawGradicule; }
+				else if (keyPressed->code == sf::Keyboard::Key::P) { isPaused = !isPaused; }
+				else if (keyPressed->code == sf::Keyboard::Key::S ||
+					(keyPressed->code == sf::Keyboard::Key::Right))
+				{
+					isPaused = true;
+					stepOnce = true;
+				}
+				else if (keyPressed->code == sf::Keyboard::Key::Escape) window.close();
 				//if (keyPressed->code == sf::Keyboard::Key::R)
 				//{
 				//	grid.assign(GRID_W * GRID_H, Cell{});
@@ -177,9 +180,36 @@ int main(int argc, char** argv)
 				//}
 				// TODO : if window dimensions change should the projection class be notified - probably yes.
 			}
+			if (const auto* resized = event->getIf<sf::Event::Resized>())
+			{
+				sf::FloatRect visibleArea({ 0,0 }, { static_cast<float_t>(resized->size.x), static_cast<float_t>(resized->size.y) });
+				window.setView(sf::View(visibleArea));
+
+				pproj->setWindowSize(resized->size.x, resized->size.y);
+				gradicule.erase(gradicule.begin(), gradicule.end());              // erase current set of lat/lon lines
+				grad.rebuild();                                                   // rebuild world -> map correlation
+				buildGradicule(&grad, &gradicule);                                // rebuild new set of lat/lon lines
+			}
 		}
 
-		tecPlates.updateState();
+		if (isPaused)
+		{
+			if (stepOnce)
+			{
+				tecPlates.updateState(tecPlates.getDeltaTime());
+				stepOnce = false;
+			}
+		}
+		else
+		{
+			accumulatorSec += frameDt;
+			while (accumulatorSec >= FIXED_STEP_SEC)
+			{
+				tecPlates.updateState(tecPlates.getDeltaTime());
+				accumulatorSec -= FIXED_STEP_SEC;
+			}
+		}
+
 
 		// populate projected coordinate models
 		for (int32_t y = 0; y < gridH; y++)
@@ -208,10 +238,18 @@ int main(int argc, char** argv)
 				}
 
 				// compute bounding corners
-				sf::Vector2f p0 = {static_cast<float_t>(pproj->convert(c.lat, c.lon).first), static_cast<float_t>(pproj->convert(c.lat, c.lon).second)};
-				sf::Vector2f p1 = {static_cast<float_t>(pproj->convert(c.lat, c.lon + (2.0f * PI / gridW)).first), static_cast<float_t>(pproj->convert(c.lat, c.lon + (2.0f * PI / gridW)).second)};
-				sf::Vector2f p2 = {static_cast<float_t>(pproj->convert(c.lat - (PI / gridH), c.lon).first), static_cast<float_t>(pproj->convert(c.lat - (PI / gridH), c.lon).second)};
-				sf::Vector2f p3 = {static_cast<float_t>(pproj->convert(c.lat - (PI / gridH), (2.0f * PI / gridW)).first),static_cast<float_t>(pproj->convert(c.lat - (PI / gridH), (2.0f * PI / gridW)).second) };
+				float_t dLon = 2.0f * PI / gridW;
+				float_t dLat = PI / gridH;
+
+				auto c0 = pproj->convert(c.lat, c.lon);
+				auto c1 = pproj->convert(c.lat, c.lon + dLon);
+				auto c2 = pproj->convert(c.lat - dLat, c.lon);
+				auto c3 = pproj->convert(c.lat - dLat, c.lon + dLon);
+
+				sf::Vector2f p0 = { static_cast<float_t>(c0.first), static_cast<float_t>(c0.second) };
+				sf::Vector2f p1 = { static_cast<float_t>(c1.first), static_cast<float_t>(c1.second) };
+				sf::Vector2f p2 = { static_cast<float_t>(c2.first), static_cast<float_t>(c2.second) };
+				sf::Vector2f p3 = { static_cast<float_t>(c3.first), static_cast<float_t>(c3.second) };
 				
 				int vertexNdx = ndx * 6;
 				//// set up vertex array, CCW winding order
@@ -229,11 +267,23 @@ int main(int argc, char** argv)
 
 		if (drawGradicule)  // Z-order is determined by order of drawing, bug gradicule last so it is visible
 		{
-			for (sf::VertexArray va : gradicule)
+			for (sf::VertexArray& va : gradicule)
 			{
 				window.draw(va);
 			}
 		}
+		
+		char timeBuf[64];
+		std::snprintf(timeBuf, sizeof(timeBuf), "Elapsed:%.1f Myr [%s]", tecPlates.getElapsedTime(),
+			            (isPaused ? "PAUSED - S: step | P: resume" : "RUNNING - P: pause"));
+		timeText.setString(timeBuf);
+
+		sf::FloatRect bounds = timeText.getLocalBounds();
+		float_t padding = 12.0f;
+		timeText.setPosition({ padding - bounds.position.x,
+			static_cast<float_t>(window.getSize().y) - bounds.size.y - bounds.position.y - padding });
+
+		window.draw(timeText);
 
 		window.display();
 	}
@@ -257,6 +307,55 @@ bool isInteger(const char * bp)
 {
 	const char* ep = bp + strlen(bp);
 	return ep == std::find_if(bp, ep, [](char ch) {return !std::isdigit(ch); });
+}
+
+
+/**********************************************************************************************************************
+ * Function: buildGradicule
+ * 
+ * Abstract:
+ *
+ * Input   :
+ *
+ * Returns :
+ *
+ * Written : Nov 2026(gkhuber)
+ *********************************************************************************************************************/
+void buildGradicule(gradicule* pgrad, std::vector<sf::VertexArray>* pva)
+{
+
+	int cntLatLines = 180.0f / pgrad->slices() + 1.0;
+	int cntLonLines = 360.0f / pgrad->segments();
+	sf::Color lineColor = sf::Color::Yellow;
+
+
+	// build horizontal lines.
+	for (int32_t row = 0; row < cntLatLines; row++)
+	{
+		sf::VertexArray va(sf::PrimitiveType::LineStrip);
+
+		for (int32_t col = 0; col <= cntLonLines; col++)
+		{
+			int ndx = row * (cntLonLines + 1) + col;
+			auto [x, y] = pgrad->getPoint(ndx);
+			va.append(sf::Vertex{ {static_cast<float_t>(y), static_cast<float_t>(x)}, lineColor });
+		}
+		pva->push_back(va);
+	}
+	// build vertical lines  
+	for (int32_t col = 0; col < cntLonLines + 1; col++)
+	{
+		sf::VertexArray va(sf::PrimitiveType::LineStrip);
+
+		for (int32_t row = 0; row < cntLatLines; row++)
+		{
+			uint32_t ndx = col + row * (cntLonLines + 1);
+			auto [x, y] = pgrad->getPoint(ndx);
+			va.append(sf::Vertex{ {static_cast<float_t>(y), static_cast<float_t>(x)}, lineColor });
+		}
+
+		pva->push_back(va);
+	}
 }
 
 
@@ -300,6 +399,5 @@ void showHelp(const char* name)
 	std::cout << "s <num>       use number as the PRNG engine seed, if not given use a random seed" << std::endl;
 	std::cout << "v             displays program version, and then exits                          " << std::endl;
 	std::cout << "h             displays a short usage screen (this screen) and then exits        " << std::endl;
-
 }
 

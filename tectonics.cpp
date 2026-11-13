@@ -56,12 +56,12 @@ void tectonics::initGrid()
 
   for (int32_t y = 0; y < m_gridH; ++y)
   {
-    float_t v = static_cast<float_t>(y) / (m_gridH - 1);
+    float_t v = static_cast<float_t>(y) / (m_gridH);
     float_t lat = PI / 2.0f - v * PI;
 
     for (int32_t x = 0; x < m_gridW; ++x)
     {
-      float_t u = static_cast<float_t>(x) / (m_gridW - 1);
+      float_t u = static_cast<float_t>(x) / (m_gridW);
       float_t lon = u * 2.0f * PI - PI;
 
       int32_t idx = y * m_gridW + x;
@@ -75,14 +75,14 @@ void tectonics::initGrid()
 void tectonics::initTectonics()
 {
   std::uniform_real_distribution<float_t> distAxis(-1.0f, 1.0f);
-  std::uniform_real_distribution<float_t> distSpeed(0.01f, 0.04f);
+  std::uniform_real_distribution<float_t> distSpeed(1.5f, 10.0f);                    // realisting tectonic movement is 1.5 cm/year to 10.1 cm/year
   std::uniform_int_distribution<int>      distGrid(0, ((m_gridW * m_gridH) - 1));
 
   for (uint8_t ndx = 0; ndx < m_nbrPlates; ndx++)
   {
     plate   newPlate;
 
-    sf::Vector3f axis(distAxis(*m_pGen), distAxis(*m_pGen), distAxis(*m_pGen));
+    sf::Vector3f axis(distAxis(*m_pGen), distAxis(*m_pGen), distAxis(*m_pGen));      // randomly choose an euler-axis
     float_t   mag = std::sqrt(axis.x * axis.x + axis.y * axis.y + axis.z * axis.z);
 
     newPlate.rotAxis(sf::Vector3f{axis.x/mag, axis.y/mag, axis.z/mag});
@@ -149,8 +149,9 @@ void tectonics::initPlates()
   }
 }
 
-void tectonics::updateState()
+void tectonics::updateState(float_t dt)
 {
+  //m_elapsedTime += m_dt;
   std::vector<struct cell> nextGrid = m_grid;
 
   for (int32_t ndx = 0; ndx < m_gridH * m_gridW; ndx++)
@@ -159,6 +160,9 @@ void tectonics::updateState()
     if (0xFF == pId) continue;
 
     plate Plate = m_plates[pId];
+
+    float_t omega = (Plate.rotSpeed() * CMPERYR2KMPERMYR) / EARTH_RADIUS;    // convert linear speed into angular speed
+    float_t deltaAngle = omega * dt;                                         // calculate angular change
 
     float_t cosLat = std::cos(m_grid[ndx].lat);
     float_t posX = cosLat * std::cos(m_grid[ndx].lon);
@@ -172,9 +176,9 @@ void tectonics::updateState()
       Plate.rotAxis().x * posY - Plate.rotAxis().y * posX);
 
     // compute new position vector
-    float_t nextX = posX + crossProd.x * Plate.rotSpeed();
-    float_t nextY = posY + crossProd.y * Plate.rotSpeed();
-    float_t nextZ = posZ + crossProd.z * Plate.rotSpeed();
+    float_t nextX = posX + crossProd.x * deltaAngle;
+    float_t nextY = posY + crossProd.y * deltaAngle;
+    float_t nextZ = posZ + crossProd.z * deltaAngle;
 
     // convert back to lat, lon coordinates
     float newLat = std::asin(nextZ / std::sqrt(nextX * nextX + nextY * nextY + nextZ * nextZ));
@@ -216,6 +220,7 @@ void tectonics::updateState()
   }
 
   m_grid = nextGrid;
+  m_elapsedTime += dt;
 }
 
 

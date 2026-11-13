@@ -58,6 +58,26 @@ void gradicule::worldGradicule()
 }
 
 
+
+/**********************************************************************************************************************
+ * Function: rebuild
+ *
+ * Abstract: erases the old map coordinates and then rebuilds them based on the new window size.
+ *
+ * Input   :
+ *
+ * Returns :
+ *
+ * Written : Nov 2026 (gkhuber)
+ *********************************************************************************************************************/
+void gradicule::rebuild()
+{
+  // TODO : erase m_mapPts;
+  m_mapPts.erase(m_mapPts.begin(), m_mapPts.end());
+  mapGradicule();
+}
+
+
 /**********************************************************************************************************************
  * Function: mapGradicule
  *

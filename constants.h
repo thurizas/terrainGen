@@ -20,6 +20,9 @@ static const double cos30 = 0.8660254037844386467637231707529;      // cos30 = s
 static const double sin60 = 0.8660254037844386467637231707529;      // sin60 = sqrt(3)/2
 static const double cos60 = 0.5000000000000000000000000000000;      // cos30 = 1/2
 
+static const double_t EARTH_RADIUS = 6371.0f;        // radius in kilometers
+static const double_t CMPERYR2KMPERMYR = 10.0f;      // centimeters per year to kilometers per million yearsS
+
 // equal earth constants....
 const float A1 = 1.340264f;
 const float A2 = -0.081106f;

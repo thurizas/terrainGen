@@ -10,6 +10,12 @@ equalEarthProj::~equalEarthProj()
 
 }
 
+void equalEarthProj::setWindowSize(double_t newW, double_t newH)
+{
+  m_winWidth = newW;
+  m_winHeight = newH;
+}
+
 std::pair<double_t, double_t> equalEarthProj::convert(double_t lat, double lon)
 {
   std::pair<double_t, double_t> ret;

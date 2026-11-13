@@ -12,6 +12,7 @@ public:
     MollweideProj(float_t w, float_t h, float r);
     ~MollweideProj(void);
 
+    void setWindowSize(double_t, double_t);
     std::pair<double_t, double_t> convert(double_t lat, double_t lon);
 
 private:

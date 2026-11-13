@@ -11,6 +11,7 @@ public:
   projection(std::string s) : m_name(s) { }
   virtual ~projection() { }
 
+  virtual void setWindowSize(double_t, double_t) = 0;
   virtual std::pair<double_t, double_t> convert(double_t, double_t) = 0;  // convert from(lat, long) -> (x,y)
   
 

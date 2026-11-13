@@ -17,6 +17,8 @@ public:
   size_t size() { return m_pts.size(); }
   std::pair<double_t, double_t> getPoint(int32_t ndx) { return m_mapPts[ndx]; }
   std::pair<double_t, double_t> getWorldPoint(int32_t ndx) { return m_pts[ndx]; }
+  void rebuild();
+
 
 private:
   projection* m_proj = nullptr;

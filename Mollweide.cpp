@@ -34,6 +34,11 @@ MollweideProj::~MollweideProj(void)
 {
 }
 
+void MollweideProj::setWindowSize(double_t newWidth, double_t newHeight)
+{
+  m_winWidth = newWidth;
+  m_winHeigth = newHeight;
+}
 
 /* precondition : expect lat and lon to be passed in as radians */
 std::pair<double_t, double_t> MollweideProj::convert(double_t lat, double_t lon)
